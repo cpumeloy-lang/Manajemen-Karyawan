@@ -1,0 +1,44 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+*.local
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+mobile-absensi/.env
+mobile-absensi/.env.*
+!mobile-absensi/.env.example
+mobile-absensi/.expo/
+
+# Build, test, and runtime artifacts
+coverage/
+uploads/
+*.pid
+
+# Database dumps and local backups
+*.backup
+*.backup.gz
+backups/
+db_cluster-*.backup/
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?

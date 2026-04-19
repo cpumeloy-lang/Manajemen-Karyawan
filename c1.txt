@@ -1,0 +1,45 @@
+import { createClient } from '@supabase/supabase-js';
+import { AllRequest } from '../types.ts';
+
+// Menggunakan variabel lingkungan untuk konfigurasi Supabase
+let configuredSupabaseUrl = import.meta.env.VITE_SUPABASE_URL?.trim();
+
+if (configuredSupabaseUrl && configuredSupabaseUrl.includes('<IP_KOMPUTER_SERVER>')) {
+  configuredSupabaseUrl = configuredSupabaseUrl.replace('<IP_KOMPUTER_SERVER>', window.location.hostname);
+}
+
+const supabaseUrl = (!configuredSupabaseUrl || configuredSupabaseUrl.toLowerCase() === 'auto')
+  ? `${window.location.protocol}//${window.location.hostname}:54321
+  : configuredSupabaseUrl;
+const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+// Validasi konfigurasi untuk mencegah error
+if (!supabaseUrl || !supabaseKey) {
+  console.error('❌ Konfigurasi Supabase tidak lengkap!');
+  console.error('VITE_SUPABASE_URL:', configuredSupabaseUrl ? 'SET' : 'MISSING');
+  console.error('VITE_SUPABASE_ANON_KEY:', supabaseKey ? 'SET' : 'MISSING');
+  console.error('Pastikan VITE_SUPABASE_URL (atau gunakan nilai "auto") dan VITE_SUPABASE_ANON_KEY telah diatur di file .env.local');
+} else {
+  console.log('✅ Supabase configuration loaded');
+  console.log('📍 URL:', supabaseUrl);
+}
+
+// Tipe generik untuk Supabase, bisa diperluas nanti
+export const supabase = createClient(supabaseUrl, supabaseKey, {
+  auth: {
+    autoRefreshToken: true,
+    persistSession: true,
+    detectSessionInUrl: true,
+    flowType: 'pkce'
+  }
+});
+
+// Fungsi helper untuk mengubah objek dari snake_case (DB) ke camelCase (JS)
+// Diabaikan untuk saat ini karena kita menggunakan quoted identifiers
+// export const fromSnakeCase = (data: any) => { ... }
+
+// Fungsi helper untuk mengubah objek dari camelCase (JS) ke snake_case (DB)
+// Diabaikan untuk saat ini
+// export const toSnakeCase = (data: any) => { ... }
+
+

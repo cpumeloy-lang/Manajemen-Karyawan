@@ -1,0 +1,23 @@
+{
+  "expo": {
+    "name": "HRMS Absensi",
+    "slug": "hrms-absensi",
+    "version": "0.1.0",
+    "scheme": "hrmsabsensi",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "backgroundColor": "#06736a"
+    },
+    "assetBundlePatterns": ["**/*"],
+    "android": {
+      "package": "com.hrmsabsensi.mobile"
+    },
+    "ios": {
+      "supportsTablet": false
+    },
+    "web": {
+      "bundler": "metro"
+    }
+  }
+}

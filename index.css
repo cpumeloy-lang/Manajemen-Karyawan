@@ -1,0 +1,71 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  input:not([type='checkbox']):not([type='radio']):not([type='range']),
+  select,
+  textarea {
+    @apply rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-800 shadow-sm transition-all duration-200 ease-out;
+  }
+
+  input:not([type='checkbox']):not([type='radio']):not([type='range'])::placeholder,
+  textarea::placeholder {
+    color: #94a3b8;
+  }
+
+  input:not([type='checkbox']):not([type='radio']):not([type='range']):focus,
+  select:focus,
+  textarea:focus {
+    outline: none;
+    border-color: #06736a;
+    box-shadow: 0 0 0 4px rgba(6, 115, 106, 0.12);
+  }
+
+  input:not([type='checkbox']):not([type='radio']):not([type='range']):disabled,
+  select:disabled,
+  textarea:disabled {
+    cursor: not-allowed;
+    background-color: #f8fafc;
+    color: #94a3b8;
+  }
+
+  button {
+    transition: transform 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease;
+  }
+
+  button:hover:not(:disabled) {
+    transform: translateY(-1px);
+  }
+
+  button:active:not(:disabled) {
+    transform: translateY(0);
+  }
+}
+
+/* Custom Scrollbar Styling */
+nav::-webkit-scrollbar {
+  width: 6px;
+}
+
+nav::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+nav::-webkit-scrollbar-thumb {
+  background: #d1d5db;
+  border-radius: 3px;
+}
+
+nav::-webkit-scrollbar-thumb:hover {
+  background: #9ca3af;
+}
+
+/* For Firefox */
+nav {
+}
+
+/* Smooth scrolling */
+nav {
+  scroll-behavior: smooth;
+}

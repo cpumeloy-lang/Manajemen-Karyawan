@@ -1,0 +1,13 @@
+# Ignore large images or temporary files
+*.tmp
+*.cache
+
+# Ignore uploaded employee photos (should be on server/storage)
+# Uncomment jika foto karyawan tidak ingin di-commit
+# employees/
+
+# Keep .gitkeep
+!.gitkeep
+
+# Keep README
+!README.md

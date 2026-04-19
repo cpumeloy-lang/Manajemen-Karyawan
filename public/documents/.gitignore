@@ -1,0 +1,23 @@
+# Ignore semua file dokumen yang diupload
+# Dokumen seharusnya disimpan di server/storage, bukan di repository
+
+# Ignore semua file kecuali .gitkeep dan README
+*
+!.gitkeep
+!README.md
+!.gitignore
+
+# Ignore file backup
+*.bak
+*.backup
+
+# Ignore temporary files
+*.tmp
+*.temp
+~*
+
+# Ignore macOS files
+.DS_Store
+
+# Ignore Windows files
+Thumbs.db

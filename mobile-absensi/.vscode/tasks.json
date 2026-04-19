@@ -1,0 +1,11 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Android Assemble Debug",
+			"type": "shell",
+			"command": "cd android && gradlew.bat :app:assembleDebug -x lint -x test --console=plain",
+			"isBackground": false
+		}
+	]
+}

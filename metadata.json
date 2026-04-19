@@ -1,0 +1,5 @@
+{
+  "name": "Manajemen Karyawan Rumah Sakit",
+  "description": "A modern web application for managing hospital employee data, including profiles, departments, and job roles. Features a dashboard with analytics and AI-powered job description generation.",
+  "requestFramePermissions": []
+}
