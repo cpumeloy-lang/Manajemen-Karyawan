@@ -54,7 +54,7 @@ export function LoginScreen({ onLogin }: LoginScreenProps) {
         <Text style={styles.subtitle}>Aplikasi mobile khusus karyawan. Web tetap untuk HR dan admin.</Text>
       </View>
 
-      <AppCard title="Masuk Karyawan">
+      <AppCard title="Masuk Karyawan" style={styles.loginCard}>
         <TextInput
           value={email}
           onChangeText={setEmail}
@@ -83,6 +83,7 @@ const styles = StyleSheet.create({
   hero: {
     gap: 8,
     paddingVertical: 8,
+    marginBottom: 18,
   },
   kicker: {
     color: colors.primary,
@@ -105,14 +106,19 @@ const styles = StyleSheet.create({
   input: {
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: 14,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
+    borderRadius: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
     fontSize: 16,
     backgroundColor: '#fff',
+    marginBottom: 14,
+  },
+  loginCard: {
+    paddingBottom: 22,
   },
   error: {
     color: colors.danger,
     fontSize: 14,
+    marginBottom: 12,
   },
 });

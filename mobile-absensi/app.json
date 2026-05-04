@@ -6,18 +6,58 @@
     "scheme": "hrmsabsensi",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
+    "description": "Aplikasi absensi mobile untuk HRMS Pro — check-in/out dengan GPS dan biometrik.",
+    "primaryColor": "#06736a",
     "splash": {
-      "backgroundColor": "#06736a"
+      "backgroundColor": "#06736a",
+      "resizeMode": "contain"
     },
-    "assetBundlePatterns": ["**/*"],
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "plugins": [
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "Aplikasi memerlukan lokasi untuk mencatat titik absensi Anda."
+        }
+      ],
+      "expo-secure-store"
+    ],
     "android": {
-      "package": "com.hrmsabsensi.mobile"
+      "package": "com.hrmsabsensi.mobile",
+      "versionCode": 1,
+      "adaptiveIcon": {
+        "backgroundColor": "#06736a"
+      },
+      "permissions": [
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_FINE_LOCATION",
+        "INTERNET",
+        "VIBRATE"
+      ],
+      "blockedPermissions": [
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.SYSTEM_ALERT_WINDOW"
+      ]
     },
     "ios": {
-      "supportsTablet": false
+      "supportsTablet": false,
+      "bundleIdentifier": "com.hrmsabsensi.mobile",
+      "buildNumber": "1",
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "Aplikasi memerlukan lokasi untuk mencatat titik absensi Anda.",
+        "NSFaceIDUsageDescription": "Aplikasi menggunakan Face ID untuk verifikasi identitas saat absensi.",
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "web": {
       "bundler": "metro"
+    },
+    "extra": {
+      "privacyPolicyUrl": "https://your-domain.com/privacy",
+      "supportEmail": "support@your-domain.com"
     }
   }
 }

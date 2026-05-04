@@ -1,4 +1,4 @@
-import { storage } from '../lib/storage';
+import { secureStorage as storage } from '../lib/storage';
 import type { MobileUser } from '../types';
 import { supabase } from '../config/supabase';
 import { mapEmployeeRowToMobileUser } from './profileMapper';

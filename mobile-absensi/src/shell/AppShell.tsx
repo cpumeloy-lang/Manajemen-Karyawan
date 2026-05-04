@@ -7,6 +7,7 @@ import { DashboardScreen } from '../features/dashboard/DashboardScreen';
 import { useAuth } from '../features/auth/AuthContext';
 import { AttendanceScreen } from '../features/attendance/AttendanceScreen';
 import { AttendanceHistoryScreen } from '../features/attendance/AttendanceHistoryScreen';
+import { DeviceRegistrationScreen } from '../features/device/DeviceRegistrationScreen';
 import { LoginScreen } from '../features/auth/LoginScreen';
 import { ProfileScreen } from '../features/profile/ProfileScreen';
 import { attendanceService } from '../services/attendanceService';
@@ -48,6 +49,7 @@ export function AppShell() {
     ) : null,
     attendance: user ? <AttendanceScreen user={user} records={attendanceRecords} onRefresh={loadAttendanceRecords} /> : null,
     history: user ? <AttendanceHistoryScreen records={attendanceRecords} /> : null,
+    device: user ? <DeviceRegistrationScreen user={user} /> : null,
     profile: user ? <ProfileScreen user={user} /> : null,
   }), [attendanceRecords, user]);
 

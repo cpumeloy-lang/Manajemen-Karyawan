@@ -7,6 +7,7 @@ const navItems: Array<{ key: AttendanceTab; label: string; icon: string }> = [
   { key: 'dashboard', label: 'Beranda', icon: '🏠' },
   { key: 'attendance', label: 'Absensi', icon: '⏱️' },
   { key: 'history', label: 'Riwayat', icon: '📋' },
+  { key: 'device', label: 'Perangkat', icon: '🔐' },
   { key: 'profile', label: 'Profil', icon: '👤' },
 ];
 
@@ -39,22 +40,26 @@ const styles = StyleSheet.create({
     borderTopColor: colors.border,
     paddingHorizontal: 8,
     paddingVertical: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 10,
+    elevation: 4,
   },
   item: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
     gap: 4,
-    paddingVertical: 8,
-    borderRadius: 14,
+    paddingVertical: 10,
+    borderRadius: 16,
   },
   itemActive: {
-    backgroundColor: '#e6f3f2',
+    backgroundColor: '#ecf6f4',
   },
   icon: {
     fontSize: 18,
   },
-  iconActive: {},
   label: {
     fontSize: 12,
     color: colors.muted,

@@ -1,4 +1,20 @@
-export type AttendanceTab = 'dashboard' | 'attendance' | 'history' | 'profile';
+export type AttendanceTab = 'dashboard' | 'attendance' | 'history' | 'profile' | 'device';
+
+export type BiometricType = 'face' | 'fingerprint' | 'iris' | 'code' | 'totp' | 'manual';
+
+export interface FaceVerificationResult {
+  verified: boolean;
+  score: number;
+  details?: Record<string, any>;
+}
+
+export interface DeviceInfo {
+  deviceId: string;
+  deviceName: string;
+  platform: 'Android' | 'iOS' | 'web' | 'unknown';
+  deviceFingerprint: string;
+  isPrimary: boolean;
+}
 
 export interface MobileUser {
   id: string;
@@ -21,14 +37,26 @@ export interface AttendanceRecord {
   clockIn: string;
   clockOut?: string;
   location: string;
+  latitude?: number;
+  longitude?: number;
   isLate: boolean;
   overtimeHours: number;
-  status: 'Pending' | 'Approved' | 'Rejected' | 'Recorded';
+  status: 'Hadir' | 'Terlambat' | 'Absen' | 'Cuti' | 'Sakit' | 'Pending' | 'Recorded';
+  source?: 'mobile' | 'web-ess' | 'web-admin';
+  notes?: string;
+  deviceId?: string;
+  biometricType?: BiometricType;
+  biometricVerified?: boolean;
+  faceMatchScoreCheckIn?: number;
+  faceMatchScoreCheckOut?: number;
+  faceVerificationCheckIn?: Record<string, any>;
+  faceVerificationCheckOut?: Record<string, any>;
 }
 
 export interface CheckInDraft {
   tanggal: string;
   clockIn: string;
+  clockOut?: string;
   location: string;
   latitude?: number;
   longitude?: number;

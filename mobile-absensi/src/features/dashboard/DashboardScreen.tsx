@@ -28,19 +28,19 @@ export function DashboardScreen({ user, records, onGoAttendance, onGoHistory }: 
       </View>
 
       <View style={styles.grid}>
-        <AppCard>
+        <AppCard style={styles.summaryCard}>
           <Text style={styles.cardLabel}>Total Absensi</Text>
           <Text style={styles.cardValue}>{totalRecords}</Text>
         </AppCard>
-        <AppCard>
+        <AppCard style={styles.summaryCard}>
           <Text style={styles.cardLabel}>Tepat Waktu</Text>
           <Text style={styles.cardValue}>{presentCount}</Text>
         </AppCard>
-        <AppCard>
+        <AppCard style={styles.summaryCard}>
           <Text style={styles.cardLabel}>Terlambat</Text>
           <Text style={styles.cardValue}>{lateCount}</Text>
         </AppCard>
-        <AppCard>
+        <AppCard style={styles.summaryCard}>
           <Text style={styles.cardLabel}>Shift</Text>
           <Text style={styles.cardValue}>{user.shift || '-'}</Text>
         </AppCard>
@@ -71,6 +71,7 @@ export function DashboardScreen({ user, records, onGoAttendance, onGoHistory }: 
 const styles = StyleSheet.create({
   hero: {
     gap: 6,
+    marginBottom: 10,
   },
   kicker: {
     color: colors.primary,
@@ -92,25 +93,37 @@ const styles = StyleSheet.create({
   grid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 12,
+    justifyContent: 'space-between',
+  },
+  summaryCard: {
+    flexBasis: '47%',
+    minWidth: 150,
   },
   cardLabel: {
     color: colors.muted,
     fontSize: 12,
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
   },
   cardValue: {
     color: colors.primary,
     fontSize: 22,
     fontWeight: '800',
+    marginTop: 4,
   },
   detail: {
     color: colors.text,
     fontWeight: '700',
+    fontSize: 15,
   },
   muted: {
     color: colors.muted,
+    fontSize: 14,
   },
   actions: {
     gap: 12,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
   },
 });

@@ -131,19 +131,36 @@ android {
             keyAlias 'androiddebugkey'
             keyPassword 'android'
         }
+        release {
+            // Production keystore — values from gradle.properties (NEVER commit to git)
+            // Generate: keytool -genkeypair -v -keystore hrms-release.keystore -alias hrms-key -keyalg RSA -keysize 2048 -validity 10000
+            def releaseKeystore = System.getenv("HRMS_RELEASE_STORE_FILE") ?: findProperty('HRMS_RELEASE_STORE_FILE')
+            if (releaseKeystore) {
+                storeFile file(releaseKeystore)
+                storePassword System.getenv("HRMS_RELEASE_STORE_PASSWORD") ?: findProperty('HRMS_RELEASE_STORE_PASSWORD')
+                keyAlias System.getenv("HRMS_RELEASE_KEY_ALIAS") ?: findProperty('HRMS_RELEASE_KEY_ALIAS')
+                keyPassword System.getenv("HRMS_RELEASE_KEY_PASSWORD") ?: findProperty('HRMS_RELEASE_KEY_PASSWORD')
+            }
+        }
     }
     buildTypes {
         debug {
             signingConfig signingConfigs.debug
         }
         release {
-            // Caution! In production, you need to generate your own keystore file.
-            // see https://reactnative.dev/docs/signed-apk-android.
-            signingConfig signingConfigs.debug
-            shrinkResources (findProperty('android.enableShrinkResourcesInReleaseBuilds')?.toBoolean() ?: false)
-            minifyEnabled enableProguardInReleaseBuilds
-            proguardFiles getDefaultProguardFile("proguard-android.txt"), "proguard-rules.pro"
+            // Use release signing if keystore configured, otherwise fall back to debug (with warning)
+            def hasReleaseKey = System.getenv("HRMS_RELEASE_STORE_FILE") != null || project.hasProperty('HRMS_RELEASE_STORE_FILE')
+            if (hasReleaseKey) {
+                signingConfig signingConfigs.release
+            } else {
+                println "⚠️  WARNING: Release APK akan di-sign dengan DEBUG keystore. Setup HRMS_RELEASE_STORE_FILE sebelum publish!"
+                signingConfig signingConfigs.debug
+            }
+            shrinkResources (findProperty('android.enableShrinkResourcesInReleaseBuilds')?.toBoolean() ?: true)
+            minifyEnabled (findProperty('android.enableProguardInReleaseBuilds')?.toBoolean() ?: true)
+            proguardFiles getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro"
             crunchPngs (findProperty('android.enablePngCrunchInReleaseBuilds')?.toBoolean() ?: true)
+            debuggable false
         }
     }
     packagingOptions {
