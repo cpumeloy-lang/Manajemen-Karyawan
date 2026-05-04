@@ -1,0 +1,44 @@
+# Dependencies & build
+node_modules
+dist
+coverage
+
+# Environment & secrets
+.env
+.env.*
+
+# Documentation
+*.md
+docs/
+
+# Database scripts & backups
+*.sql
+backups/
+db_cluster-*
+
+# Development
+.git
+.github
+.vscode
+.idea
+*.log
+*.backup
+*.backup.gz
+
+# Mobile app
+mobile-absensi
+
+# Legacy
+src/
+
+# Monitoring configs (mounted separately)
+monitoring/
+
+# SSL certs (mounted separately)
+ssl/
+
+# Test files
+*.test.ts
+*.test.tsx
+coverage/
+vitest.config.ts

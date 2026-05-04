@@ -5,7 +5,8 @@ export default defineConfig({
     environment: 'node',
     include: ['**/*.test.ts'],
     coverage: {
-      reporter: ['text', 'html'],
+      provider: 'v8' as const,
+      reporter: ['text', 'html'] as const,
     },
   },
 });

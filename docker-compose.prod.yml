@@ -69,11 +69,12 @@ services:
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./database-setup.sql:/docker-entrypoint-initdb.d/01-setup.sql
-      - ./database-optimization-indexes.sql:/docker-entrypoint-initdb.d/02-indexes.sql
-      - ./database-optimization-pagination.sql:/docker-entrypoint-initdb.d/03-pagination.sql
-    ports:
-      - "5432:5432"
+      - ./database/database-setup.sql:/docker-entrypoint-initdb.d/01-setup.sql
+      - ./database/database-optimization-indexes.sql:/docker-entrypoint-initdb.d/02-indexes.sql
+      - ./database/database-optimization-pagination.sql:/docker-entrypoint-initdb.d/03-pagination.sql
+    # Port NOT exposed externally — only accessible via internal docker network
+    # ports:
+    #   - "5432:5432"
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U hrms_user -d hrms_prod"]
@@ -84,11 +85,12 @@ services:
   redis:
     image: redis:7-alpine
     container_name: hrms-redis
-    command: redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy allkeys-lru
+    command: redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy allkeys-lru --requirepass ${REDIS_PASSWORD}
     volumes:
       - redis_data:/data
-    ports:
-      - "6379:6379"
+    # Port NOT exposed externally — only accessible via internal docker network
+    # ports:
+    #   - "6379:6379"
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
@@ -176,9 +178,10 @@ services:
       - xpack.graph.enabled=false
       - xpack.watcher.enabled=false
       - xpack.ml.enabled=false
-    ports:
-      - "9200:9200"
-      - "9300:9300"
+    # Elasticsearch not exposed externally
+    # ports:
+    #   - "9200:9200"
+    #   - "9300:9300"
     volumes:
       - elasticsearch_data:/usr/share/elasticsearch/data
     restart: unless-stopped
@@ -191,11 +194,12 @@ services:
   logstash:
     image: docker.elastic.co/logstash/logstash:8.11.0
     container_name: hrms-logstash
-    ports:
-      - "5044:5044"
-      - "5000:5000/tcp"
-      - "5000:5000/udp"
-      - "9600:9600"
+    # Logstash not exposed externally
+    # ports:
+    #   - "5044:5044"
+    #   - "5000:5000/tcp"
+    #   - "5000:5000/udp"
+    #   - "9600:9600"
     volumes:
       - ./monitoring/logstash.conf:/usr/share/logstash/pipeline/logstash.conf:ro
     depends_on:
@@ -230,8 +234,9 @@ services:
     command: >
       sh -c "
         while true; do
-          pg_dump -h postgres -U hrms_user hrms_prod > /backups/backup-$(date +%Y%m%d-%H%M%S).sql
-          sleep 86400  # Daily backup
+          pg_dump -h postgres -U hrms_user hrms_prod | gzip > /backups/backup-$$(date +%Y%m%d-%H%M%S).sql.gz
+          find /backups -name '*.sql.gz' -mtime +7 -delete
+          sleep 86400  # Daily backup, keep 7 days
         done
       "
     depends_on:

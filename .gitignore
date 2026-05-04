@@ -42,3 +42,26 @@ db_cluster-*.backup/
 *.njsproj
 *.sln
 *.sw?
+
+# Mobile keystores (NEVER commit!)
+*.keystore
+*.jks
+!mobile-absensi/android/app/debug.keystore
+
+# SSL certificates
+ssl/
+*.pem
+*.key
+*.crt
+
+# Mobile build outputs
+mobile-absensi/android/app/build/
+mobile-absensi/android/.gradle/
+mobile-absensi/android/build/
+mobile-absensi/ios/build/
+mobile-absensi/ios/Pods/
+
+# Supabase local dev
+supabase/.temp/
+supabase/.branches/
+

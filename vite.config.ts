@@ -4,9 +4,11 @@ import react from '@vitejs/plugin-react';
 
 export default defineConfig(({ mode }) => {
     const env = loadEnv(mode, '.', '');
+    const isProd = mode === 'production';
+
     return {
       server: {
-        port: 3030, // Mengubah port menjadi 3030 agar tidak bentrok dengan Grafana
+        port: 3030,
         host: '0.0.0.0',
       },
       plugins: [react()],
@@ -21,6 +23,24 @@ export default defineConfig(({ mode }) => {
       },
       preview: {
         port: 3030,
-      }
+      },
+      esbuild: isProd ? {
+        drop: ['console', 'debugger'],
+      } : undefined,
+      build: {
+        chunkSizeWarningLimit: 600,
+        rollupOptions: {
+          output: {
+            manualChunks: {
+              'vendor-react': ['react', 'react-dom'],
+              'vendor-supabase': ['@supabase/supabase-js'],
+              'vendor-charts': ['recharts'],
+              'vendor-xlsx': ['xlsx'],
+              'vendor-zustand': ['zustand'],
+              'vendor-faceapi': ['face-api.js'],
+            },
+          },
+        },
+      },
     };
 });
