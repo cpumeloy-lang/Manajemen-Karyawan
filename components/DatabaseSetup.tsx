@@ -88,7 +88,7 @@ const DatabaseSetup: React.FC = () => {
           <button
             onClick={handleDownloadSetupScript}
             disabled={isLoading}
-            className={`px-4 py-2 rounded-md text-white font-medium ${
+            className={`px-4 py-2 rounded-lg text-white font-medium ${
               isLoading ? 'bg-blue-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'
             }`}
           >
@@ -97,7 +97,7 @@ const DatabaseSetup: React.FC = () => {
           <button
             onClick={handleCopySetupScript}
             disabled={isLoading}
-            className={`px-4 py-2 rounded-md text-white font-medium ${
+            className={`px-4 py-2 rounded-lg text-white font-medium ${
               isLoading ? 'bg-slate-400 cursor-not-allowed' : 'bg-slate-600 hover:bg-slate-700'
             }`}
           >
@@ -118,7 +118,7 @@ const DatabaseSetup: React.FC = () => {
       </div>
       
       {result && (
-        <div className={`mt-4 p-3 rounded-md ${
+        <div className={`mt-4 p-3 rounded-lg ${
           result.success ? 'bg-green-50 text-green-800' : 'bg-red-50 text-red-800'
         }`}>
           {result.message}

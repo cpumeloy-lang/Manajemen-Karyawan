@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Employee, Status, Shift, WorkUnit, Document, Compensation, Role, Department, Position, MaritalStatus, EducationLevel, Address, EmergencyContact, Education, WorkHistory, BankAccount } from '../types.ts';
+import { Employee, Status, Shift, WorkUnit, Document, Compensation, Role, Department, Position, Religion, MaritalStatus, EducationLevel, Address, EmergencyContact, Education, WorkHistory, BankAccount } from '../types.ts';
 import { generateJobDescription } from '../services/geminiService.ts';
 import { generateNIK, validateNIK, isNIKUnique } from '../services/nikService.ts';
+import { supabase } from '../services/supabaseClient.ts';
 import LoadingSpinner from './LoadingSpinner.tsx';
 import { XMarkIcon, SparklesIcon, TrashIcon, PlusIcon } from './icons.tsx';
 
@@ -55,6 +56,7 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ isOpen, onClose, onSave, em
         npwp: '',
         bpjsKesehatan: '',
         bpjsKetenagakerjaan: '',
+        agama: undefined,
         maritalStatus: 'Single',
         dependents: 0,
         address: initialAddress,
@@ -78,6 +80,9 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ isOpen, onClose, onSave, em
     const [documents, setDocuments] = useState<Document[]>([]);
     
     const [newDoc, setNewDoc] = useState({ name: '', type: 'Lainnya' as Document['type'], fileUrl: '' });
+    const [selectedFile, setSelectedFile] = useState<File | null>(null);
+    const [isUploadingDoc, setIsUploadingDoc] = useState(false);
+    const [isSaving, setIsSaving] = useState(false);
     
     // Validasi data form - HARUS di top level, tidak boleh setelah fungsi lain
     const [errors, setErrors] = useState<Record<string, string>>({});
@@ -87,6 +92,18 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ isOpen, onClose, onSave, em
     const isVerified = employee.isVerified || false;
     const isProfileCompleted = employee.isProfileCompleted || false;
 
+
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key === 'Escape' && isOpen) onClose();
+        };
+        document.addEventListener('keydown', handleKeyDown);
+        if (isOpen) document.body.style.overflow = 'hidden';
+        return () => {
+            document.removeEventListener('keydown', handleKeyDown);
+            document.body.style.overflow = '';
+        };
+    }, [isOpen, onClose]);
 
     useEffect(() => {
         if (employeeToEdit) {
@@ -125,8 +142,6 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ isOpen, onClose, onSave, em
         setGeneratedDesc('');
     }, [employeeToEdit, isOpen]);
 
-    if (!isOpen) return null;
-
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
         const { name, value } = e.target;
         if (name === 'role') {
@@ -143,6 +158,9 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ isOpen, onClose, onSave, em
             } else {
                 setEmployee({ ...employee, unitKerjaId: value });
             }
+        } else if (name === 'managedUnitId') {
+            // Handle managedUnitId for kepala_ruangan - sync with unitKerjaId
+            setEmployee({ ...employee, managedUnitId: value, unitKerjaId: value });
         } else {
             setEmployee({ ...employee, [name]: value });
         }
@@ -173,21 +191,64 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ isOpen, onClose, onSave, em
         setIsGenerating(false);
     };
 
-    const handleAddDocument = () => {
-        if (!newDoc.name || !newDoc.fileUrl) {
-            alert("Nama dokumen dan URL file harus diisi.");
+    const handleAddDocument = async () => {
+        if (!newDoc.name) {
+            alert("Nama dokumen harus diisi.");
             return;
         }
+
+        if (!selectedFile && !newDoc.fileUrl) {
+            alert("Pilih file dokumen atau masukkan URL.");
+            return;
+        }
+
+        let finalUrl = newDoc.fileUrl;
+
+        if (selectedFile) {
+            setIsUploadingDoc(true);
+            try {
+                // Generate unique filename to avoid collisions
+                const fileExt = selectedFile.name.split('.').pop();
+                const fileName = `${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
+                const filePath = `${fileName}`;
+
+                const { data: uploadData, error: uploadError } = await supabase.storage
+                    .from('employee-documents')
+                    .upload(filePath, selectedFile, {
+                        cacheControl: '3600',
+                        upsert: false
+                    });
+
+                if (uploadError) {
+                    throw uploadError;
+                }
+
+                const { data: publicUrlData } = supabase.storage
+                    .from('employee-documents')
+                    .getPublicUrl(filePath);
+                
+                finalUrl = publicUrlData.publicUrl;
+            } catch (error: any) {
+                console.error("Upload error:", error);
+                alert(`Gagal mengunggah file: ${error.message}`);
+                setIsUploadingDoc(false);
+                return;
+            }
+            setIsUploadingDoc(false);
+        }
+
         // FIX: Added employeeId to satisfy the Document type.
         // For new employees, employee.id is an empty string, which is handled during save.
         const docToAdd: Document = {
             ...newDoc,
+            fileUrl: finalUrl,
             id: crypto.randomUUID(),
             employeeId: employee.id,
             uploadedAt: new Date().toISOString(),
         };
         setDocuments([...documents, docToAdd]);
         setNewDoc({ name: '', type: 'Lainnya', fileUrl: '' }); // Reset form
+        setSelectedFile(null);
     };
 
     const handleDeleteDocument = (id: string) => {
@@ -252,6 +313,10 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ isOpen, onClose, onSave, em
         if (employee.role === 'kepala_ruangan' && !employee.managedUnitId) {
             newErrors.managedUnitId = "Unit yang dikelola wajib dipilih untuk Kepala Ruangan";
         }
+        // Validasi unitKerjaId - wajib untuk semua karyawan agar muncul di dashboard kepala ruangan
+        if (employee.role !== 'admin' && employee.role !== 'hrd' && !employee.unitKerjaId) {
+            newErrors.unitKerjaId = "Unit Kerja wajib dipilih agar karyawan terdeteksi di dashboard";
+        }
         setErrors(newErrors);
         return Object.keys(newErrors).length === 0;
     };
@@ -264,6 +329,8 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ isOpen, onClose, onSave, em
         if (!isValid) {
             return; // Jangan lanjutkan jika validasi gagal
         }
+        
+        setIsSaving(true);
         
         // Check if profile is completed (all required fields filled)
         const profileCompleted = !!(
@@ -283,15 +350,15 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ isOpen, onClose, onSave, em
             isProfileCompleted: profileCompleted,
         };
 
-        if (employeeToEdit) {
-            // Kirim newPassword jika ada reset password
-            onSave(sharedData, newPassword || undefined);
-        } else {
-            const newEmployeeData: NewEmployeeData = {
-                ...sharedData,
-                password: password,
-            };
-            onSave(newEmployeeData);
+        try {
+            if (employeeToEdit) {
+                await (onSave as (e: any, p?: string) => Promise<void>)(sharedData, newPassword || undefined);
+            } else {
+                const newEmployeeData: NewEmployeeData = { ...sharedData, password: password };
+                await (onSave as (e: any) => Promise<void>)(newEmployeeData);
+            }
+        } finally {
+            setIsSaving(false);
         }
         // onClose() DIHAPUS - akan dipanggil otomatis di App.tsx setelah save selesai
     };
@@ -426,10 +493,22 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ isOpen, onClose, onSave, em
     ];
 
     return (
-        <div className="fixed inset-0 bg-black bg-opacity-60 flex justify-center items-center p-2 sm:p-4 z-50 transition-opacity duration-300">
-            <div className="bg-white rounded-lg shadow-xl w-full max-w-7xl max-h-[98vh] flex flex-col">
+        <div
+            className={`fixed inset-0 z-50 transition-opacity duration-300 ${isOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}
+            aria-modal="true"
+            role="dialog"
+        >
+            {/* Backdrop */}
+            <div
+                className="absolute inset-0 bg-black/50"
+                onClick={onClose}
+            />
+            {/* Drawer */}
+            <div className={`absolute inset-y-0 right-0 flex w-full max-w-5xl flex-col bg-white shadow-2xl transition-transform duration-300 ease-in-out rounded-l-2xl overflow-hidden ${
+                isOpen ? 'translate-x-0' : 'translate-x-full'
+            }`}>
                 {/* Header */}
-                <div className="p-6 border-b flex justify-between items-center sticky top-0 bg-white z-10 rounded-t-lg">
+                <div className="p-6 border-b flex justify-between items-center bg-white z-10 flex-shrink-0">
                     <div className="flex items-center gap-4">
                         <h2 className="text-2xl font-bold text-[#06736a]">
                             {employeeToEdit ? 'Edit Data Karyawan' : 'Tambah Karyawan Baru'}
@@ -460,7 +539,7 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ isOpen, onClose, onSave, em
                 </div>
 
                 {/* Tabs Navigation */}
-                <div className="border-b bg-gray-50 px-6 sticky top-[88px] z-10">
+                <div className="border-b bg-gray-50 px-6 flex-shrink-0">
                     <div className="flex space-x-1 overflow-x-auto scrollbar-thin">
                         {tabs.map((tab) => (
                             <button
@@ -481,7 +560,7 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ isOpen, onClose, onSave, em
                 </div>
 
                 {/* Form Content */}
-                <form onSubmit={handleSubmit} className="flex-grow overflow-y-auto">
+                <form id="employee-form" onSubmit={handleSubmit} className="flex-1 overflow-y-auto">
                     <div className="p-8 space-y-6">
                         
                         {/* Warning Banner if Locked */}
@@ -553,7 +632,7 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ isOpen, onClose, onSave, em
                                                 name="nama" 
                                                 value={employee.nama} 
                                                 onChange={handleChange} 
-                                                className={`mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-[#06736a] focus:border-[#06736a] p-3 ${errors.nama ? 'border-red-500' : ''}`}
+                                                className={`mt-1 block w-full border-gray-300 rounded-lg shadow-sm focus:ring-[#06736a] focus:border-[#06736a] p-3 ${errors.nama ? 'border-red-500' : ''}`}
                                                 placeholder="Contoh: Dr. John Doe"
                                                 required
                                             />
@@ -567,7 +646,7 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ isOpen, onClose, onSave, em
                                                     name="nik"
                                                     value={employee.nik || ''}
                                                     onChange={isAdmin ? handleChange : undefined}
-                                                    className={`mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-[#06736a] focus:border-[#06736a] p-3 ${errors.nik ? 'border-red-500' : ''}`}
+                                                    className={`mt-1 block w-full border-gray-300 rounded-lg shadow-sm focus:ring-[#06736a] focus:border-[#06736a] p-3 ${errors.nik ? 'border-red-500' : ''}`}
                                                     placeholder="2024-MED-001"
                                                     readOnly={!isAdmin ? true : false}
                                                 />
@@ -575,7 +654,7 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ isOpen, onClose, onSave, em
                                                     <button
                                                         type="button"
                                                         onClick={handleGenerateNIK}
-                                                        className="px-3 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm"
+                                                        className="px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm"
                                                     >
                                                         Generate NIK
                                                     </button>
@@ -591,7 +670,7 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ isOpen, onClose, onSave, em
                                                 name="kredensial" 
                                                 value={employee.kredensial} 
                                                 onChange={handleChange} 
-                                                className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-[#06736a] focus:border-[#06736a] p-3"
+                                                className="mt-1 block w-full border-gray-300 rounded-lg shadow-sm focus:ring-[#06736a] focus:border-[#06736a] p-3"
                                                 placeholder="Contoh: Sp.PD, M.Kes"
                                             />
                                         </div>
@@ -603,7 +682,7 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ isOpen, onClose, onSave, em
                                                 name="email" 
                                                 value={employee.email} 
                                                 onChange={handleChange} 
-                                                className={`mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-[#06736a] focus:border-[#06736a] p-3 ${errors.email ? 'border-red-500' : ''}`}
+                                                className={`mt-1 block w-full border-gray-300 rounded-lg shadow-sm focus:ring-[#06736a] focus:border-[#06736a] p-3 ${errors.email ? 'border-red-500' : ''}`}
                                                 placeholder="email@hospital.com"
                                                 required
                                             />
@@ -617,7 +696,7 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ isOpen, onClose, onSave, em
                                                 name="telepon" 
                                                 value={employee.telepon} 
                                                 onChange={handleChange} 
-                                                className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-[#06736a] focus:border-[#06736a] p-3"
+                                                className="mt-1 block w-full border-gray-300 rounded-lg shadow-sm focus:ring-[#06736a] focus:border-[#06736a] p-3"
                                                 placeholder="081234567890"
                                             />
                                         </div>
@@ -629,7 +708,7 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ isOpen, onClose, onSave, em
                                                 name="birthDate" 
                                                 value={employee.birthDate} 
                                                 onChange={handleChange} 
-                                                className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-[#06736a] focus:border-[#06736a] p-3"
+                                                className="mt-1 block w-full border-gray-300 rounded-lg shadow-sm focus:ring-[#06736a] focus:border-[#06736a] p-3"
                                                 title="Tanggal lahir karyawan"
                                             />
                                         </div>
@@ -641,7 +720,7 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ isOpen, onClose, onSave, em
                                                 name="foto" 
                                                 value={employee.foto} 
                                                 onChange={handleChange} 
-                                                className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-[#06736a] focus:border-[#06736a] p-3"
+                                                className="mt-1 block w-full border-gray-300 rounded-lg shadow-sm focus:ring-[#06736a] focus:border-[#06736a] p-3"
                                                 placeholder="https://..."
                                             />
                                         </div>
@@ -658,7 +737,7 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ isOpen, onClose, onSave, em
                                                     type="password" 
                                                     value={password} 
                                                     onChange={(e) => setPassword(e.target.value)} 
-                                                    className={`mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-[#06736a] focus:border-[#06736a] p-3 ${errors.password ? 'border-red-500' : ''}`}
+                                                    className={`mt-1 block w-full border-gray-300 rounded-lg shadow-sm focus:ring-[#06736a] focus:border-[#06736a] p-3 ${errors.password ? 'border-red-500' : ''}`}
                                                     placeholder="Minimal 6 karakter"
                                                     required
                                                 />
@@ -682,7 +761,7 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ isOpen, onClose, onSave, em
                                                             type="password" 
                                                             value={newPassword} 
                                                             onChange={(e) => setNewPassword(e.target.value)} 
-                                                            className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-[#06736a] focus:border-[#06736a] p-3"
+                                                            className="mt-1 block w-full border-gray-300 rounded-lg shadow-sm focus:ring-[#06736a] focus:border-[#06736a] p-3"
                                                             placeholder="Minimal 6 karakter"
                                                         />
                                                     </div>
@@ -696,7 +775,7 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ isOpen, onClose, onSave, em
                                                 name="role" 
                                                 value={employee.role} 
                                                 onChange={handleChange} 
-                                                className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-[#06736a] focus:border-[#06736a] p-3"
+                                                className="mt-1 block w-full border-gray-300 rounded-lg shadow-sm focus:ring-[#06736a] focus:border-[#06736a] p-3"
                                                 title="Pilih role pengguna"
                                             >
                                            <option value="karyawan">Karyawan</option>
@@ -725,7 +804,7 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ isOpen, onClose, onSave, em
                                                 name="ktpNumber" 
                                                 value={employee.ktpNumber || ''} 
                                                 onChange={handleChange} 
-                                                className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-[#06736a] focus:border-[#06736a] p-3"
+                                                className="mt-1 block w-full border-gray-300 rounded-lg shadow-sm focus:ring-[#06736a] focus:border-[#06736a] p-3"
                                                 placeholder="16 digit nomor KTP"
                                                 maxLength={16}
                                             />
@@ -738,7 +817,7 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ isOpen, onClose, onSave, em
                                                 name="npwp" 
                                                 value={employee.npwp || ''} 
                                                 onChange={handleChange} 
-                                                className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-[#06736a] focus:border-[#06736a] p-3"
+                                                className="mt-1 block w-full border-gray-300 rounded-lg shadow-sm focus:ring-[#06736a] focus:border-[#06736a] p-3"
                                                 placeholder="XX.XXX.XXX.X-XXX.XXX"
                                                 maxLength={20}
                                             />
@@ -752,7 +831,7 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ isOpen, onClose, onSave, em
                                                 name="bpjsKesehatan" 
                                                 value={employee.bpjsKesehatan || ''} 
                                                 onChange={handleChange} 
-                                                className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-[#06736a] focus:border-[#06736a] p-3"
+                                                className="mt-1 block w-full border-gray-300 rounded-lg shadow-sm focus:ring-[#06736a] focus:border-[#06736a] p-3"
                                                 placeholder="Nomor BPJS Kesehatan"
                                             />
                                         </div>
@@ -764,7 +843,7 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ isOpen, onClose, onSave, em
                                                 name="bpjsKetenagakerjaan" 
                                                 value={employee.bpjsKetenagakerjaan || ''} 
                                                 onChange={handleChange} 
-                                                className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-[#06736a] focus:border-[#06736a] p-3"
+                                                className="mt-1 block w-full border-gray-300 rounded-lg shadow-sm focus:ring-[#06736a] focus:border-[#06736a] p-3"
                                                 placeholder="Nomor BPJS Ketenagakerjaan"
                                             />
                                         </div>
@@ -775,7 +854,7 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ isOpen, onClose, onSave, em
                                                 name="maritalStatus" 
                                                 value={employee.maritalStatus || 'Single'} 
                                                 onChange={handleChange} 
-                                                className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-[#06736a] focus:border-[#06736a] p-3"
+                                                className="mt-1 block w-full border-gray-300 rounded-lg shadow-sm focus:ring-[#06736a] focus:border-[#06736a] p-3"
                                                 title="Pilih status pernikahan"
                                             >
                                                 <option value="Single">Single</option>
@@ -786,13 +865,32 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ isOpen, onClose, onSave, em
                                         </div>
 
                                         <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-2">Agama</label>
+                                            <select 
+                                                name="agama" 
+                                                value={employee.agama || ''} 
+                                                onChange={handleChange} 
+                                                className="mt-1 block w-full border-gray-300 rounded-lg shadow-sm focus:ring-[#06736a] focus:border-[#06736a] p-3"
+                                                title="Pilih agama"
+                                            >
+                                                <option value="">Pilih Agama</option>
+                                                <option value="Islam">Islam</option>
+                                                <option value="Kristen Protestan">Kristen Protestan</option>
+                                                <option value="Kristen Katolik">Kristen Katolik</option>
+                                                <option value="Hindu">Hindu</option>
+                                                <option value="Buddha">Buddha</option>
+                                                <option value="Konghucu">Konghucu</option>
+                                            </select>
+                                        </div>
+
+                                        <div>
                                             <label className="block text-sm font-medium text-gray-700 mb-2">Jumlah Tanggungan</label>
                                             <input 
                                                 type="number" 
                                                 name="dependents" 
                                                 value={employee.dependents || 0} 
                                                 onChange={handleChange} 
-                                                className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-[#06736a] focus:border-[#06736a] p-3"
+                                                className="mt-1 block w-full border-gray-300 rounded-lg shadow-sm focus:ring-[#06736a] focus:border-[#06736a] p-3"
                                                 min="0"
                                                 placeholder="0"
                                             />
@@ -811,7 +909,7 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ isOpen, onClose, onSave, em
                                             <textarea 
                                                 value={employee.address?.ktp || ''} 
                                                 onChange={(e) => handleAddressChange('ktp', e.target.value)} 
-                                                className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-[#06736a] focus:border-[#06736a] p-3"
+                                                className="mt-1 block w-full border-gray-300 rounded-lg shadow-sm focus:ring-[#06736a] focus:border-[#06736a] p-3"
                                                 rows={2}
                                                 placeholder="Jl. Contoh No. 123, RT/RW 001/002"
                                             />
@@ -822,7 +920,7 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ isOpen, onClose, onSave, em
                                             <textarea 
                                                 value={employee.address?.domisili || ''} 
                                                 onChange={(e) => handleAddressChange('domisili', e.target.value)} 
-                                                className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-[#06736a] focus:border-[#06736a] p-3"
+                                                className="mt-1 block w-full border-gray-300 rounded-lg shadow-sm focus:ring-[#06736a] focus:border-[#06736a] p-3"
                                                 rows={2}
                                                 placeholder="Sama dengan KTP atau alamat berbeda"
                                             />
@@ -842,7 +940,7 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ isOpen, onClose, onSave, em
                                                     type="text" 
                                                     value={employee.address?.province || ''} 
                                                     onChange={(e) => handleAddressChange('province', e.target.value)} 
-                                                    className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-[#06736a] focus:border-[#06736a] p-3"
+                                                    className="mt-1 block w-full border-gray-300 rounded-lg shadow-sm focus:ring-[#06736a] focus:border-[#06736a] p-3"
                                                     placeholder="DKI Jakarta"
                                                 />
                                             </div>
@@ -853,7 +951,7 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ isOpen, onClose, onSave, em
                                                     type="text" 
                                                     value={employee.address?.city || ''} 
                                                     onChange={(e) => handleAddressChange('city', e.target.value)} 
-                                                    className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-[#06736a] focus:border-[#06736a] p-3"
+                                                    className="mt-1 block w-full border-gray-300 rounded-lg shadow-sm focus:ring-[#06736a] focus:border-[#06736a] p-3"
                                                     placeholder="Jakarta Selatan"
                                                 />
                                             </div>
@@ -864,7 +962,7 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ isOpen, onClose, onSave, em
                                                     type="text" 
                                                     value={employee.address?.postalCode || ''} 
                                                     onChange={(e) => handleAddressChange('postalCode', e.target.value)} 
-                                                    className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-[#06736a] focus:border-[#06736a] p-3"
+                                                    className="mt-1 block w-full border-gray-300 rounded-lg shadow-sm focus:ring-[#06736a] focus:border-[#06736a] p-3"
                                                     placeholder="12345"
                                                     maxLength={5}
                                                 />
@@ -880,7 +978,7 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ isOpen, onClose, onSave, em
                                         <button 
                                             type="button" 
                                             onClick={handleAddEmergencyContact} 
-                                            className="px-4 py-2 bg-[#06736a] text-white rounded-md hover:bg-[#054f46] text-sm flex items-center gap-2"
+                                            className="px-4 py-2 bg-[#06736a] text-white rounded-lg hover:bg-[#054f46] text-sm flex items-center gap-2"
                                         >
                                             <PlusIcon className="h-4 w-4" />
                                             Tambah Kontak
@@ -907,7 +1005,7 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ isOpen, onClose, onSave, em
                                                         type="text" 
                                                         value={contact.name} 
                                                         onChange={(e) => handleUpdateEmergencyContact(index, 'name', e.target.value)} 
-                                                        className="block w-full border-gray-300 rounded-md shadow-sm focus:ring-[#06736a] focus:border-[#06736a] p-2 text-sm"
+                                                        className="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-[#06736a] focus:border-[#06736a] p-2 text-sm"
                                                         placeholder="Nama kontak darurat"
                                                     />
                                                 </div>
@@ -918,7 +1016,7 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ isOpen, onClose, onSave, em
                                                         type="text" 
                                                         value={contact.relationship} 
                                                         onChange={(e) => handleUpdateEmergencyContact(index, 'relationship', e.target.value)} 
-                                                        className="block w-full border-gray-300 rounded-md shadow-sm focus:ring-[#06736a] focus:border-[#06736a] p-2 text-sm"
+                                                        className="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-[#06736a] focus:border-[#06736a] p-2 text-sm"
                                                         placeholder="Istri/Suami/Orang Tua/Saudara"
                                                     />
                                                 </div>
@@ -929,7 +1027,7 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ isOpen, onClose, onSave, em
                                                         type="tel" 
                                                         value={contact.phone} 
                                                         onChange={(e) => handleUpdateEmergencyContact(index, 'phone', e.target.value)} 
-                                                        className="block w-full border-gray-300 rounded-md shadow-sm focus:ring-[#06736a] focus:border-[#06736a] p-2 text-sm"
+                                                        className="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-[#06736a] focus:border-[#06736a] p-2 text-sm"
                                                         placeholder="081234567890"
                                                     />
                                                 </div>
@@ -940,7 +1038,7 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ isOpen, onClose, onSave, em
                                                         type="text" 
                                                         value={contact.address} 
                                                         onChange={(e) => handleUpdateEmergencyContact(index, 'address', e.target.value)} 
-                                                        className="block w-full border-gray-300 rounded-md shadow-sm focus:ring-[#06736a] focus:border-[#06736a] p-2 text-sm"
+                                                        className="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-[#06736a] focus:border-[#06736a] p-2 text-sm"
                                                         placeholder="Alamat kontak"
                                                     />
                                                 </div>
@@ -968,7 +1066,7 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ isOpen, onClose, onSave, em
                                                 type="text" 
                                                 value={employee.bankAccount?.bankName || ''} 
                                                 onChange={(e) => handleBankAccountChange('bankName', e.target.value)} 
-                                                className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-[#06736a] focus:border-[#06736a] p-3"
+                                                className="mt-1 block w-full border-gray-300 rounded-lg shadow-sm focus:ring-[#06736a] focus:border-[#06736a] p-3"
                                                 placeholder="Bank Mandiri"
                                             />
                                         </div>
@@ -979,7 +1077,7 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ isOpen, onClose, onSave, em
                                                 type="text" 
                                                 value={employee.bankAccount?.accountNumber || ''} 
                                                 onChange={(e) => handleBankAccountChange('accountNumber', e.target.value)} 
-                                                className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-[#06736a] focus:border-[#06736a] p-3"
+                                                className="mt-1 block w-full border-gray-300 rounded-lg shadow-sm focus:ring-[#06736a] focus:border-[#06736a] p-3"
                                                 placeholder="1234567890"
                                             />
                                         </div>
@@ -990,7 +1088,7 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ isOpen, onClose, onSave, em
                                                 type="text" 
                                                 value={employee.bankAccount?.accountHolder || ''} 
                                                 onChange={(e) => handleBankAccountChange('accountHolder', e.target.value)} 
-                                                className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-[#06736a] focus:border-[#06736a] p-3"
+                                                className="mt-1 block w-full border-gray-300 rounded-lg shadow-sm focus:ring-[#06736a] focus:border-[#06736a] p-3"
                                                 placeholder="Sesuai nama di buku rekening"
                                             />
                                             <button 
@@ -1016,7 +1114,7 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ isOpen, onClose, onSave, em
                                         <button 
                                             type="button" 
                                             onClick={handleAddEducation} 
-                                            className="px-4 py-2 bg-[#06736a] text-white rounded-md hover:bg-[#054f46] text-sm flex items-center gap-2"
+                                            className="px-4 py-2 bg-[#06736a] text-white rounded-lg hover:bg-[#054f46] text-sm flex items-center gap-2"
                                         >
                                             <PlusIcon className="h-4 w-4" />
                                             Tambah Pendidikan
@@ -1042,7 +1140,7 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ isOpen, onClose, onSave, em
                                                     <select 
                                                         value={edu.level} 
                                                         onChange={(e) => handleUpdateEducation(index, 'level', e.target.value as EducationLevel)} 
-                                                        className="block w-full border-gray-300 rounded-md shadow-sm focus:ring-[#06736a] focus:border-[#06736a] p-2 text-sm"
+                                                        className="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-[#06736a] focus:border-[#06736a] p-2 text-sm"
                                                         title="Pilih jenjang pendidikan"
                                                     >
                                                         <option value="SMA">SMA</option>
@@ -1059,7 +1157,7 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ isOpen, onClose, onSave, em
                                                         type="text" 
                                                         value={edu.institution} 
                                                         onChange={(e) => handleUpdateEducation(index, 'institution', e.target.value)} 
-                                                        className="block w-full border-gray-300 rounded-md shadow-sm focus:ring-[#06736a] focus:border-[#06736a] p-2 text-sm"
+                                                        className="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-[#06736a] focus:border-[#06736a] p-2 text-sm"
                                                         placeholder="Nama universitas/sekolah"
                                                         title="Nama institusi pendidikan"
                                                     />
@@ -1071,7 +1169,7 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ isOpen, onClose, onSave, em
                                                         type="text" 
                                                         value={edu.major} 
                                                         onChange={(e) => handleUpdateEducation(index, 'major', e.target.value)} 
-                                                        className="block w-full border-gray-300 rounded-md shadow-sm focus:ring-[#06736a] focus:border-[#06736a] p-2 text-sm"
+                                                        className="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-[#06736a] focus:border-[#06736a] p-2 text-sm"
                                                         placeholder="Program studi"
                                                         title="Nama jurusan atau program studi"
                                                     />
@@ -1083,7 +1181,7 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ isOpen, onClose, onSave, em
                                                         type="number" 
                                                         value={edu.graduationYear} 
                                                         onChange={(e) => handleUpdateEducation(index, 'graduationYear', parseInt(e.target.value))} 
-                                                        className="block w-full border-gray-300 rounded-md shadow-sm focus:ring-[#06736a] focus:border-[#06736a] p-2 text-sm"
+                                                        className="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-[#06736a] focus:border-[#06736a] p-2 text-sm"
                                                         min="1950"
                                                         max="2100"
                                                         title="Tahun lulus pendidikan"
@@ -1097,7 +1195,7 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ isOpen, onClose, onSave, em
                                                         step="0.01"
                                                         value={edu.gpa || ''} 
                                                         onChange={(e) => handleUpdateEducation(index, 'gpa', parseFloat(e.target.value) || undefined)} 
-                                                        className="block w-full border-gray-300 rounded-md shadow-sm focus:ring-[#06736a] focus:border-[#06736a] p-2 text-sm"
+                                                        className="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-[#06736a] focus:border-[#06736a] p-2 text-sm"
                                                         min="0"
                                                         max="4"
                                                         placeholder="0.00 - 4.00"
@@ -1123,7 +1221,7 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ isOpen, onClose, onSave, em
                                         <button 
                                             type="button" 
                                             onClick={handleAddWorkHistory} 
-                                            className="px-4 py-2 bg-[#06736a] text-white rounded-md hover:bg-[#054f46] text-sm flex items-center gap-2"
+                                            className="px-4 py-2 bg-[#06736a] text-white rounded-lg hover:bg-[#054f46] text-sm flex items-center gap-2"
                                         >
                                             <PlusIcon className="h-4 w-4" />
                                             Tambah Riwayat
@@ -1150,7 +1248,7 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ isOpen, onClose, onSave, em
                                                         type="text" 
                                                         value={work.company} 
                                                         onChange={(e) => handleUpdateWorkHistory(index, 'company', e.target.value)} 
-                                                        className="block w-full border-gray-300 rounded-md shadow-sm focus:ring-[#06736a] focus:border-[#06736a] p-2 text-sm"
+                                                        className="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-[#06736a] focus:border-[#06736a] p-2 text-sm"
                                                         placeholder="PT. ABC"
                                                     />
                                                 </div>
@@ -1161,7 +1259,7 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ isOpen, onClose, onSave, em
                                                         type="text" 
                                                         value={work.position} 
                                                         onChange={(e) => handleUpdateWorkHistory(index, 'position', e.target.value)} 
-                                                        className="block w-full border-gray-300 rounded-md shadow-sm focus:ring-[#06736a] focus:border-[#06736a] p-2 text-sm"
+                                                        className="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-[#06736a] focus:border-[#06736a] p-2 text-sm"
                                                         placeholder="Staff/Manager/etc"
                                                     />
                                                 </div>
@@ -1172,7 +1270,7 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ isOpen, onClose, onSave, em
                                                         type="date" 
                                                         value={work.startDate} 
                                                         onChange={(e) => handleUpdateWorkHistory(index, 'startDate', e.target.value)} 
-                                                        className="block w-full border-gray-300 rounded-md shadow-sm focus:ring-[#06736a] focus:border-[#06736a] p-2 text-sm"
+                                                        className="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-[#06736a] focus:border-[#06736a] p-2 text-sm"
                                                         title="Tanggal mulai bekerja"
                                                     />
                                                 </div>
@@ -1183,7 +1281,7 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ isOpen, onClose, onSave, em
                                                         type="date" 
                                                         value={work.endDate} 
                                                         onChange={(e) => handleUpdateWorkHistory(index, 'endDate', e.target.value)} 
-                                                        className="block w-full border-gray-300 rounded-md shadow-sm focus:ring-[#06736a] focus:border-[#06736a] p-2 text-sm"
+                                                        className="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-[#06736a] focus:border-[#06736a] p-2 text-sm"
                                                         title="Tanggal selesai bekerja"
                                                     />
                                                 </div>
@@ -1194,7 +1292,7 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ isOpen, onClose, onSave, em
                                                         type="text" 
                                                         value={work.reasonLeaving} 
                                                         onChange={(e) => handleUpdateWorkHistory(index, 'reasonLeaving', e.target.value)} 
-                                                        className="block w-full border-gray-300 rounded-md shadow-sm focus:ring-[#06736a] focus:border-[#06736a] p-2 text-sm"
+                                                        className="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-[#06736a] focus:border-[#06736a] p-2 text-sm"
                                                         placeholder="Alasan resign/kontrak habis/etc"
                                                     />
                                                 </div>
@@ -1225,7 +1323,7 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ isOpen, onClose, onSave, em
                                                 name="jabatan" 
                                                 value={employee.jabatan} 
                                                 onChange={handleChange} 
-                                                className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-[#06736a] focus:border-[#06736a] p-3"
+                                                className="mt-1 block w-full border-gray-300 rounded-lg shadow-sm focus:ring-[#06736a] focus:border-[#06736a] p-3"
                                                 required
                                                 title="Pilih jabatan"
                                             >
@@ -1240,7 +1338,7 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ isOpen, onClose, onSave, em
                                                 name="departemen" 
                                                 value={employee.departemen} 
                                                 onChange={handleChange} 
-                                                className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-[#06736a] focus:border-[#06736a] p-3"
+                                                className="mt-1 block w-full border-gray-300 rounded-lg shadow-sm focus:ring-[#06736a] focus:border-[#06736a] p-3"
                                                 required
                                                 title="Pilih departemen"
                                             >
@@ -1249,20 +1347,45 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ isOpen, onClose, onSave, em
                                             </select>
                                         </div>
 
-                                        <div>
-                                            <label className="block text-sm font-medium text-gray-700 mb-2">Unit Kerja</label>
-                                            <select 
-                                                name="unitKerjaId" 
-                                                value={employee.unitKerjaId || ''} 
-                                                onChange={handleChange} 
-                                                className={`mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-[#06736a] focus:border-[#06736a] p-3 ${errors.managedUnitId ? 'border-red-500' : ''}`}
-                                                title="Pilih unit kerja"
-                                            >
-                                                <option value="">Tidak ada unit</option>
-                                                {workUnits.map(unit => <option key={unit.id} value={unit.id}>{unit.nama}</option>)}
-                                            </select>
-                                            {errors.managedUnitId && <p className="mt-1 text-sm text-red-600">{errors.managedUnitId}</p>}
-                                        </div>
+                                        {/* Unit Kerja / Unit yang Dikepalai - Conditional based on Role */}
+                                        {employee.role === 'kepala_ruangan' ? (
+                                            <div>
+                                                <label className="block text-sm font-medium text-gray-700 mb-2">Unit yang Dikepalai *</label>
+                                                <select 
+                                                    name="managedUnitId" 
+                                                    value={employee.managedUnitId || ''} 
+                                                    onChange={(e) => {
+                                                        handleChange(e);
+                                                        // Sync dengan unitKerjaId untuk kepala ruangan
+                                                        setEmployee({ ...employee, managedUnitId: e.target.value, unitKerjaId: e.target.value });
+                                                    }}
+                                                    className={`mt-1 block w-full border-gray-300 rounded-lg shadow-sm focus:ring-[#06736a] focus:border-[#06736a] p-3 ${errors.managedUnitId ? 'border-red-500' : ''}`}
+                                                    title="Pilih unit yang akan dikelola"
+                                                    required
+                                                >
+                                                    <option value="">-- Pilih Unit yang Dikepalai --</option>
+                                                    {workUnits.map(unit => <option key={unit.id} value={unit.id}>{unit.nama}</option>)}
+                                                </select>
+                                                {errors.managedUnitId && <p className="mt-1 text-sm text-red-600">{errors.managedUnitId}</p>}
+                                                <p className="mt-1 text-xs text-gray-500">Kepala ruangan akan mengelola karyawan di unit ini</p>
+                                            </div>
+                                        ) : (
+                                            <div>
+                                                <label className="block text-sm font-medium text-gray-700 mb-2">Unit Kerja</label>
+                                                <select 
+                                                    name="unitKerjaId" 
+                                                    value={employee.unitKerjaId || ''} 
+                                                    onChange={handleChange} 
+                                                    className={`mt-1 block w-full border-gray-300 rounded-lg shadow-sm focus:ring-[#06736a] focus:border-[#06736a] p-3 ${errors.unitKerjaId ? 'border-red-500' : ''}`}
+                                                    title="Pilih unit kerja tempat karyawan bekerja"
+                                                >
+                                                    <option value="">-- Pilih Unit Kerja --</option>
+                                                    {workUnits.map(unit => <option key={unit.id} value={unit.id}>{unit.nama}</option>)}
+                                                </select>
+                                                {errors.unitKerjaId && <p className="mt-1 text-sm text-red-600">{errors.unitKerjaId}</p>}
+                                                <p className="mt-1 text-xs text-gray-500">Wajib diisi agar karyawan muncul di dashboard kepala ruangan</p>
+                                            </div>
+                                        )}
 
                                         <div>
                                             <label className="block text-sm font-medium text-gray-700 mb-2">Spesialisasi</label>
@@ -1271,7 +1394,7 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ isOpen, onClose, onSave, em
                                                 name="spesialisasi" 
                                                 value={employee.spesialisasi} 
                                                 onChange={handleChange} 
-                                                className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-[#06736a] focus:border-[#06736a] p-3"
+                                                className="mt-1 block w-full border-gray-300 rounded-lg shadow-sm focus:ring-[#06736a] focus:border-[#06736a] p-3"
                                                 placeholder="Contoh: Jantung Anak"
                                                 title="Spesialisasi karyawan"
                                             />
@@ -1284,23 +1407,27 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ isOpen, onClose, onSave, em
                                                 name="hireDate" 
                                                 value={employee.hireDate} 
                                                 onChange={handleChange} 
-                                                className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-[#06736a] focus:border-[#06736a] p-3"
+                                                className="mt-1 block w-full border-gray-300 rounded-lg shadow-sm focus:ring-[#06736a] focus:border-[#06736a] p-3"
                                                 required
                                                 title="Tanggal masuk kerja"
                                             />
                                         </div>
 
                                         <div>
-                                            <label className="block text-sm font-medium text-gray-700 mb-2">Shift Kerja *</label>
+                                            <label className="block text-sm font-medium text-gray-700 mb-1">Tipe Shift Kontrak *</label>
+                                            <p className="text-xs text-gray-500 mb-2">Shift default sesuai kontrak. Penugasan shift aktif dikelola Kepala Unit.</p>
                                             <select 
                                                 name="shift" 
                                                 value={employee.shift} 
                                                 onChange={handleChange} 
-                                                className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-[#06736a] focus:border-[#06736a] p-3"
+                                                className="mt-1 block w-full border-gray-300 rounded-lg shadow-sm focus:ring-[#06736a] focus:border-[#06736a] p-3"
                                                 required
-                                                title="Pilih shift kerja"
+                                                title="Pilih tipe shift kontrak"
                                             >
-                                                {(['Pagi', 'Siang', 'Malam'] as Shift[]).map(s => <option key={s} value={s}>{s}</option>)}
+                                                <option value="Pagi">Pagi (Shift Tetap Pagi)</option>
+                                                <option value="Siang">Siang (Shift Tetap Siang)</option>
+                                                <option value="Malam">Malam (Shift Tetap Malam)</option>
+                                                <option value="Rotating">Rotating (3 Shift Bergantian)</option>
                                             </select>
                                         </div>
 
@@ -1310,7 +1437,7 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ isOpen, onClose, onSave, em
                                                 name="status" 
                                                 value={employee.status} 
                                                 onChange={handleChange} 
-                                                className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-[#06736a] focus:border-[#06736a] p-3"
+                                                className="mt-1 block w-full border-gray-300 rounded-lg shadow-sm focus:ring-[#06736a] focus:border-[#06736a] p-3"
                                                 required
                                                 title="Pilih status karyawan"
                                             >
@@ -1325,7 +1452,7 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ isOpen, onClose, onSave, em
                                                 name="sisaCuti" 
                                                 value={employee.sisaCuti || 12} 
                                                 onChange={handleChange} 
-                                                className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-[#06736a] focus:border-[#06736a] p-3"
+                                                className="mt-1 block w-full border-gray-300 rounded-lg shadow-sm focus:ring-[#06736a] focus:border-[#06736a] p-3"
                                                 min="0"
                                                 title="Sisa cuti karyawan"
                                             />
@@ -1346,7 +1473,7 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ isOpen, onClose, onSave, em
                                                 name="nomorSTR" 
                                                 value={employee.nomorSTR} 
                                                 onChange={handleChange} 
-                                                className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-[#06736a] focus:border-[#06736a] p-3"
+                                                className="mt-1 block w-full border-gray-300 rounded-lg shadow-sm focus:ring-[#06736a] focus:border-[#06736a] p-3"
                                                 placeholder="Nomor Surat Tanda Registrasi"
                                                 title="Nomor STR"
                                             />
@@ -1359,7 +1486,7 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ isOpen, onClose, onSave, em
                                                 name="tanggalKadaluarsaSTR" 
                                                 value={employee.tanggalKadaluarsaSTR} 
                                                 onChange={handleChange} 
-                                                className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-[#06736a] focus:border-[#06736a] p-3"
+                                                className="mt-1 block w-full border-gray-300 rounded-lg shadow-sm focus:ring-[#06736a] focus:border-[#06736a] p-3"
                                                 title="Tanggal kedaluwarsa STR"
                                             />
                                         </div>
@@ -1377,7 +1504,7 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ isOpen, onClose, onSave, em
                                                 type="text" 
                                                 value={sertifikasiInput} 
                                                 onChange={(e) => setSertifikasiInput(e.target.value)} 
-                                                className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-[#06736a] focus:border-[#06736a] p-3"
+                                                className="mt-1 block w-full border-gray-300 rounded-lg shadow-sm focus:ring-[#06736a] focus:border-[#06736a] p-3"
                                                 placeholder="Pisahkan dengan koma, contoh: BLS, ACLS, ATLS"
                                                 title="Daftar sertifikasi"
                                             />
@@ -1390,7 +1517,7 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ isOpen, onClose, onSave, em
                                                 type="text" 
                                                 value={kompetensiInput} 
                                                 onChange={(e) => setKompetensiInput(e.target.value)} 
-                                                className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-[#06736a] focus:border-[#06736a] p-3"
+                                                className="mt-1 block w-full border-gray-300 rounded-lg shadow-sm focus:ring-[#06736a] focus:border-[#06736a] p-3"
                                                 placeholder="Pisahkan dengan koma, contoh: Perawatan Luka, Injeksi IV"
                                                 title="Daftar kompetensi"
                                             />
@@ -1411,7 +1538,7 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ isOpen, onClose, onSave, em
                                                 name="gajiPokok" 
                                                 value={employee.compensation?.gajiPokok || ''} 
                                                 onChange={handleCompensationChange} 
-                                                className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-[#06736a] focus:border-[#06736a] p-3"
+                                                className="mt-1 block w-full border-gray-300 rounded-lg shadow-sm focus:ring-[#06736a] focus:border-[#06736a] p-3"
                                                 required
                                                 min="0"
                                                 placeholder="5000000"
@@ -1426,7 +1553,7 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ isOpen, onClose, onSave, em
                                                 name="tunjanganProfesi" 
                                                 value={employee.compensation?.tunjanganProfesi || ''} 
                                                 onChange={handleCompensationChange} 
-                                                className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-[#06736a] focus:border-[#06736a] p-3"
+                                                className="mt-1 block w-full border-gray-300 rounded-lg shadow-sm focus:ring-[#06736a] focus:border-[#06736a] p-3"
                                                 min="0"
                                                 placeholder="1000000"
                                                 title="Tunjangan profesi"
@@ -1452,7 +1579,7 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ isOpen, onClose, onSave, em
                                     
                                     <div className="space-y-3 max-h-96 overflow-y-auto">
                                         {documents.map(doc => (
-                                            <div key={doc.id} className="flex items-center justify-between p-4 bg-white rounded-md border hover:shadow-sm transition-shadow">
+                                            <div key={doc.id} className="flex items-center justify-between p-4 bg-white rounded-lg border hover:shadow-sm transition-shadow">
                                                 <div className="flex-1">
                                                     <p className="font-medium text-base">{doc.name}</p>
                                                     <div className="flex items-center gap-3 mt-1">
@@ -1474,7 +1601,7 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ isOpen, onClose, onSave, em
                                                 <button 
                                                     type="button" 
                                                     onClick={() => handleDeleteDocument(doc.id)} 
-                                                    className="ml-4 p-2 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-md transition-colors"
+                                                    className="ml-4 p-2 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors"
                                                     title="Hapus dokumen"
                                                 >
                                                     <TrashIcon className="h-5 w-5" />
@@ -1502,7 +1629,7 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ isOpen, onClose, onSave, em
                                                 type="text" 
                                                 value={newDoc.name} 
                                                 onChange={e => setNewDoc({...newDoc, name: e.target.value})} 
-                                                className="block w-full border-gray-300 rounded-md shadow-sm focus:ring-[#06736a] focus:border-[#06736a] p-3"
+                                                className="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-[#06736a] focus:border-[#06736a] p-3"
                                                 placeholder="Contoh: Ijazah S1 Kedokteran"
                                                 title="Nama dokumen"
                                             />
@@ -1513,7 +1640,7 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ isOpen, onClose, onSave, em
                                             <select 
                                                 value={newDoc.type} 
                                                 onChange={e => setNewDoc({...newDoc, type: e.target.value as Document['type']})} 
-                                                className="block w-full border-gray-300 rounded-md shadow-sm focus:ring-[#06736a] focus:border-[#06736a] p-3"
+                                                className="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-[#06736a] focus:border-[#06736a] p-3"
                                                 title="Tipe dokumen"
                                             >
                                                 {documentTypeOptions.map(type => (
@@ -1523,14 +1650,27 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ isOpen, onClose, onSave, em
                                         </div>
 
                                         <div>
-                                            <label className="block text-sm font-medium text-gray-700 mb-2">URL File *</label>
+                                            <label className="block text-sm font-medium text-gray-700 mb-2">Pilih File (PDF/JPG/PNG)</label>
+                                            <input 
+                                                type="file" 
+                                                accept=".pdf,.jpg,.jpeg,.png"
+                                                onChange={e => setSelectedFile(e.target.files?.[0] || null)} 
+                                                className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-[#06736a] file:text-white hover:file:bg-[#055f57] border border-gray-300 rounded-lg shadow-sm p-2"
+                                                title="Pilih file dari komputer"
+                                            />
+                                            {selectedFile && <p className="mt-1 text-xs text-[#06736a]">File siap diunggah: {selectedFile.name}</p>}
+                                        </div>
+
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-2">Atau masukkan URL eksternal</label>
                                             <input 
                                                 type="text" 
                                                 value={newDoc.fileUrl} 
                                                 onChange={e => setNewDoc({...newDoc, fileUrl: e.target.value})} 
-                                                className="block w-full border-gray-300 rounded-md shadow-sm focus:ring-[#06736a] focus:border-[#06736a] p-3"
-                                                placeholder="https://storage.example.com/document.pdf"
-                                                title="URL file dokumen"
+                                                className="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-[#06736a] focus:border-[#06736a] p-3 disabled:opacity-50 disabled:bg-gray-100"
+                                                placeholder="https://..."
+                                                title="URL file eksternal (opsional jika sudah memilih file)"
+                                                disabled={!!selectedFile}
                                             />
                                         </div>
 
@@ -1538,9 +1678,10 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ isOpen, onClose, onSave, em
                                             <button 
                                                 type="button" 
                                                 onClick={handleAddDocument} 
-                                                className="w-full bg-[#06736a] text-white px-6 py-3 rounded-md shadow-sm hover:bg-[#054f46] transition-colors font-medium"
+                                                disabled={isUploadingDoc}
+                                                className="w-full bg-[#06736a] text-white px-6 py-3 rounded-lg shadow-sm hover:bg-[#054f46] transition-colors font-medium disabled:opacity-70 flex justify-center items-center"
                                             >
-                                                ➕ Tambah Dokumen
+                                                {isUploadingDoc ? 'Sedang Mengunggah...' : '➕ Tambah Dokumen'}
                                             </button>
                                         </div>
                                     </div>
@@ -1555,7 +1696,7 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ isOpen, onClose, onSave, em
                                         type="button" 
                                         onClick={handleGenerateDesc} 
                                         disabled={isGenerating || !employee.jabatan || !employee.departemen} 
-                                        className="flex items-center gap-2 px-6 py-3 text-sm font-medium text-white bg-purple-600 rounded-md hover:bg-purple-700 focus:outline-none disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+                                        className="flex items-center gap-2 px-6 py-3 text-sm font-medium text-white bg-purple-600 rounded-lg hover:bg-purple-700 focus:outline-none disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
                                     >
                                         {isGenerating ? (
                                             <LoadingSpinner size="small" text="" />
@@ -1570,14 +1711,14 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ isOpen, onClose, onSave, em
                                     )}
 
                                     {isGenerating && (
-                                        <div className="flex items-center gap-2 text-sm text-gray-600 p-3 bg-blue-50 rounded-md">
+                                        <div className="flex items-center gap-2 text-sm text-gray-600 p-3 bg-blue-50 rounded-lg">
                                             <LoadingSpinner size="small" text="" />
                                             <span>AI sedang membuat deskripsi pekerjaan...</span>
                                         </div>
                                     )}
 
                                     {generatedDesc && (
-                                        <div className="mt-4 p-4 bg-white border border-green-200 rounded-md">
+                                        <div className="mt-4 p-4 bg-white border border-green-200 rounded-lg">
                                             <div className="flex items-center justify-between mb-2">
                                                 <h5 className="font-medium text-sm text-green-800">✅ Deskripsi Berhasil Dibuat</h5>
                                             </div>
@@ -1593,60 +1734,70 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ isOpen, onClose, onSave, em
                         </fieldset>
                     </div>
 
-                    {/* Form Actions - Sticky Footer */}
-                    <div className="p-6 border-t flex justify-between items-center sticky bottom-0 bg-white z-10 rounded-b-lg shadow-lg">
-                        {/* HRD Actions (left side) - hanya tampil untuk admin/HRD saat edit */}
-                        {employeeToEdit && (
-                            <div className="flex gap-3">
-                                {!isVerified && (
-                                    <button 
-                                        type="button" 
-                                        onClick={handleVerify}
-                                        className="px-4 py-2 border-2 border-green-500 text-green-700 rounded-md text-sm font-medium hover:bg-green-50 transition-colors flex items-center gap-2"
-                                        title="Verifikasi data karyawan"
-                                    >
-                                        ✓ Verifikasi Data
-                                    </button>
-                                )}
+                </form>
+
+                {/* Drawer Footer - always visible at drawer bottom */}
+                <div className="flex-shrink-0 border-t bg-white px-6 py-4 flex justify-between items-center shadow-[0_-2px_8px_rgba(0,0,0,0.06)]">
+                    {/* HRD Actions (left side) */}
+                    {employeeToEdit && (
+                        <div className="flex gap-3">
+                            {!isVerified && (
                                 <button 
                                     type="button" 
-                                    onClick={handleToggleLock}
-                                    className={`px-4 py-2 border-2 rounded-md text-sm font-medium transition-colors flex items-center gap-2 ${
-                                        isFormLocked 
-                                            ? 'border-orange-500 text-orange-700 hover:bg-orange-50' 
-                                            : 'border-red-500 text-red-700 hover:bg-red-50'
-                                    }`}
-                                    title={isFormLocked ? 'Buka kunci data' : 'Kunci data'}
+                                    onClick={handleVerify}
+                                    className="px-4 py-2 border-2 border-green-500 text-green-700 rounded-lg text-sm font-medium hover:bg-green-50 transition-colors flex items-center gap-2"
+                                    title="Verifikasi data karyawan"
                                 >
-                                    {isFormLocked ? '🔓 Buka Kunci' : '🔒 Kunci Data'}
+                                    ✓ Verifikasi Data
                                 </button>
-                            </div>
-                        )}
-                        
-                        {/* Form Actions (right side) */}
-                        <div className="flex gap-4 ml-auto">
+                            )}
                             <button 
                                 type="button" 
-                                onClick={onClose} 
-                                className="px-6 py-3 border-2 border-gray-300 rounded-md text-base font-medium text-gray-700 hover:bg-gray-100 transition-colors"
-                            >
-                                Batal
-                            </button>
-                            <button 
-                                type="submit"
-                                disabled={isFormLocked}
-                                className={`px-6 py-3 border border-transparent rounded-md shadow-sm text-base font-medium text-white transition-colors ${
+                                onClick={handleToggleLock}
+                                className={`px-4 py-2 border-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 ${
                                     isFormLocked 
-                                        ? 'bg-gray-400 cursor-not-allowed' 
-                                        : 'bg-[#06736a] hover:bg-[#054f46]'
+                                        ? 'border-orange-500 text-orange-700 hover:bg-orange-50' 
+                                        : 'border-red-500 text-red-700 hover:bg-red-50'
                                 }`}
-                                title={isFormLocked ? 'Data terkunci, tidak bisa diubah' : 'Simpan perubahan'}
+                                title={isFormLocked ? 'Buka kunci data' : 'Kunci data'}
                             >
-                                💾 Simpan Perubahan
+                                {isFormLocked ? '🔓 Buka Kunci' : '🔒 Kunci Data'}
                             </button>
                         </div>
+                    )}
+
+                    {/* Batal & Simpan */}
+                    <div className="flex gap-3 ml-auto">
+                        <button 
+                            type="button" 
+                            onClick={onClose} 
+                            className="px-5 py-2.5 border-2 border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-100 transition-colors"
+                        >
+                            Batal
+                        </button>
+                        <button 
+                            type="submit"
+                            form="employee-form"
+                            disabled={isFormLocked || isSaving}
+                            className={`flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-semibold text-white transition-colors ${
+                                isFormLocked || isSaving
+                                    ? 'bg-gray-400 cursor-not-allowed' 
+                                    : 'bg-[#06736a] hover:bg-[#054f46]'
+                            }`}
+                            title={isFormLocked ? 'Data terkunci, tidak bisa diubah' : 'Simpan perubahan'}
+                        >
+                            {isSaving ? (
+                                <>
+                                    <svg className="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                                    </svg>
+                                    Menyimpan...
+                                </>
+                            ) : '💾 Simpan Perubahan'}
+                        </button>
                     </div>
-                </form>
+                </div>
             </div>
         </div>
     );

@@ -1,8 +1,11 @@
 import React, { useState, useMemo } from 'react';
 import { Employee, AttendanceRecord, Payslip } from '../types.ts';
-import { calculatePayslip } from '../services/payrollService.ts';
+import { calculatePayslip, buildPayrollConfig } from '../services/payrollService.ts';
 import PayslipDetail from './PayslipDetail.tsx';
 import { CurrencyDollarIcon, UserGroupIcon } from './icons.tsx';
+import { useAuth, useUI, useAppData } from '../stores/appStore.ts';
+import { canManagePayroll, ensurePortalAccess } from '../services/portalAccessService.ts';
+import { createAuditLog } from '../services/auditLogService.ts';
 
 interface PayrollManagementProps {
     employees: Employee[];
@@ -10,6 +13,10 @@ interface PayrollManagementProps {
 }
 
 const PayrollManagement: React.FC<PayrollManagementProps> = ({ employees, attendanceRecords }) => {
+    const { authUser } = useAuth();
+    const { activePortal } = useUI();
+    const { systemSettings } = useAppData();
+    const payrollConfig = useMemo(() => buildPayrollConfig(systemSettings), [systemSettings]);
     const currentMonth = new Date().getMonth();
     const currentYear = new Date().getFullYear();
     const [selectedMonth, setSelectedMonth] = useState(currentMonth);
@@ -53,16 +60,43 @@ const PayrollManagement: React.FC<PayrollManagementProps> = ({ employees, attend
         });
     }, [employees, attendanceRecords, selectedMonth, selectedYear]);
     
-    const handleGeneratePayslip = (employeeData: typeof employeePayrollData[0]) => {
+    const handleGeneratePayslip = async (employeeData: typeof employeePayrollData[0]) => {
+        const portalError = ensurePortalAccess(activePortal, 'operational', 'Generate slip gaji');
+        if (portalError) {
+            alert(portalError);
+            return;
+        }
+
+        if (!canManagePayroll(authUser?.profile.role)) {
+            alert('Role Anda tidak memiliki izin membuat slip gaji.');
+            return;
+        }
+
         if (!employeeData.compensation) {
             alert(`Data kompensasi untuk ${employeeData.nama} tidak lengkap.`);
             return;
         }
         const period = `${months[selectedMonth]} ${selectedYear}`;
-        const payslip = calculatePayslip(employeeData, employeeData.attendanceForPeriod, period);
+        const payslip = calculatePayslip(employeeData, employeeData.attendanceForPeriod, period, payrollConfig);
         setSelectedPayslip(payslip);
         setSelectedEmployeeForPayslip(employeeData);
         setIsPayslipOpen(true);
+
+        void createAuditLog({
+            action: 'CREATE',
+            entityType: 'payroll',
+            entityId: payslip.id,
+            entityName: employeeData.nama,
+            newData: {
+                employeeId: employeeData.id,
+                period,
+                totalPendapatan: payslip.totalPendapatan,
+                gajiBersih: payslip.gajiBersih,
+            },
+            description: `Generate slip gaji ${employeeData.nama} periode ${period}`,
+            portalType: 'operational',
+            metadata: { source: 'PayrollManagement.handleGeneratePayslip' },
+        });
     };
 
     return (
@@ -76,18 +110,20 @@ const PayrollManagement: React.FC<PayrollManagementProps> = ({ employees, attend
                 <div className="bg-[#e6f3f2] p-4 rounded-lg mb-6 flex items-center gap-4">
                     <p className="font-medium">Pilih Periode Gaji:</p>
                      <select 
+                                title="Pilih bulan periode gaji"
                         value={selectedMonth} 
                         onChange={e => setSelectedMonth(Number(e.target.value))}
-                        className="border-gray-300 rounded-md shadow-sm"
+                        className="border-gray-300 rounded-lg shadow-sm"
                     >
                         {months.map((month, index) => (
                             <option key={month} value={index}>{month}</option>
                         ))}
                     </select>
                      <select 
+                                title="Pilih tahun periode gaji"
                         value={selectedYear} 
                         onChange={e => setSelectedYear(Number(e.target.value))}
-                        className="border-gray-300 rounded-md shadow-sm"
+                        className="border-gray-300 rounded-lg shadow-sm"
                     >
                         {years.map(year => <option key={year} value={year}>{year}</option>)}
                     </select>
@@ -123,7 +159,7 @@ const PayrollManagement: React.FC<PayrollManagementProps> = ({ employees, attend
                                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                                         <button 
                                             onClick={() => handleGeneratePayslip(emp)}
-                                            className="px-3 py-1 bg-primary text-white text-xs font-medium rounded-md hover:bg-opacity-90 disabled:bg-gray-400"
+                                            className="px-3 py-1 bg-primary text-white text-xs font-medium rounded-lg hover:bg-opacity-90 disabled:bg-gray-400"
                                             disabled={!emp.compensation}
                                             title={!emp.compensation ? 'Data kompensasi tidak lengkap' : 'Buat Slip Gaji'}
                                         >

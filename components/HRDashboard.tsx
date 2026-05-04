@@ -57,7 +57,27 @@ const HRDashboard: React.FC<HRDashboardProps> = ({
     const chartContainerRef = useRef<HTMLDivElement | null>(null);
     const [canRenderChart, setCanRenderChart] = useState(false);
     const [chartSize, setChartSize] = useState({ width: 0, height: 0 });
+    const [lastRefreshed, setLastRefreshed] = useState<Date>(new Date());
+    const [isManualRefreshing, setIsManualRefreshing] = useState(false);
     const today = new Date().toISOString().split('T')[0];
+
+    useEffect(() => {
+        setLastRefreshed(new Date());
+    }, [employees, attendanceRecords]);
+
+    const handleManualRefresh = () => {
+        setIsManualRefreshing(true);
+        window.dispatchEvent(new CustomEvent('hrms:refresh-data'));
+        setTimeout(() => setIsManualRefreshing(false), 2000);
+    };
+
+    const getLastRefreshedLabel = () => {
+        const diffMs = Date.now() - lastRefreshed.getTime();
+        const diffMin = Math.floor(diffMs / 60_000);
+        if (diffMin < 1) return 'Baru saja';
+        if (diffMin === 1) return '1 menit lalu';
+        return `${diffMin} menit lalu`;
+    };
 
     useEffect(() => {
         const el = chartContainerRef.current;
@@ -299,9 +319,26 @@ const HRDashboard: React.FC<HRDashboardProps> = ({
     return (
         <div className="space-y-6">
             <div className="bg-gradient-to-r from-[#06736a] to-[#089c8e] p-6 sm:p-8 rounded-xl shadow-md text-white">
-                <h1 className="text-3xl font-bold mb-2">Dashboard HR Manager</h1>
-                <p className="text-white/90">Monitoring kehadiran harian dan analitik SDM berbasis data aktual</p>
-                <p className="text-white/80 text-sm mt-1">{currentUser.nama} - {currentUser.jabatan}</p>
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                        <h1 className="text-3xl font-bold mb-2">Dashboard HR Manager</h1>
+                        <p className="text-white/90">Monitoring kehadiran harian dan analitik SDM berbasis data aktual</p>
+                        <p className="text-white/80 text-sm mt-1">{currentUser.nama} - {currentUser.jabatan}</p>
+                    </div>
+                    <div className="flex flex-col items-end gap-1">
+                        <button
+                            onClick={handleManualRefresh}
+                            disabled={isManualRefreshing}
+                            className="flex items-center gap-2 rounded-lg bg-white/20 hover:bg-white/30 disabled:opacity-60 px-3 py-2 text-sm font-medium text-white transition-colors"
+                        >
+                            <svg className={`h-4 w-4 ${isManualRefreshing ? 'animate-spin' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                            </svg>
+                            {isManualRefreshing ? 'Memperbarui...' : 'Refresh'}
+                        </button>
+                        <span className="text-xs text-white/70">Diperbarui: {getLastRefreshedLabel()} · Auto 60 dtk</span>
+                    </div>
+                </div>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -330,7 +367,7 @@ const HRDashboard: React.FC<HRDashboardProps> = ({
                                 key={day}
                                 type="button"
                                 onClick={() => setSelectedRange(day)}
-                                className={`rounded-md px-3 py-1 text-sm font-semibold transition ${
+                                className={`rounded-lg px-3 py-1 text-sm font-semibold transition ${
                                     selectedRange === day
                                         ? 'bg-[#06736a] text-white'
                                         : 'text-gray-600 hover:bg-white'

@@ -1,11 +1,14 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import * as XLSX from 'xlsx';
-import { Employee, SortKey, SortDirection } from '../types.ts';
+import { Employee, WorkUnit, SortKey, SortDirection } from '../types.ts';
 import { PencilIcon, TrashIcon, ChevronUpIcon, ChevronDownIcon, EyeIcon } from './icons.tsx';
 import { createEmployeeImportTemplate, EMPLOYEE_XLSX_COL_WIDTHS, EMPLOYEE_XLSX_HEADERS } from '../services/excelTemplateService.ts';
+import { useConfirm } from './ConfirmDialog.tsx';
+import EmptyState from './EmptyState.tsx';
 
 interface EmployeeTableProps {
     employees: Employee[];
+    workUnits?: WorkUnit[];
     onEdit: (employee: Employee) => void;
     onDelete: (id: string) => void;
     onView: (employee: Employee) => void;
@@ -13,9 +16,11 @@ interface EmployeeTableProps {
     sortKey: SortKey;
     sortDirection: SortDirection;
     onSort: (key: SortKey) => void;
+    isViewOnly?: boolean; // Untuk mode kepala ruangan - hanya bisa view
 }
 
-const EmployeeTable: React.FC<EmployeeTableProps> = ({ employees, onEdit, onDelete, onView, onImport, sortKey, sortDirection, onSort }) => {
+const EmployeeTable: React.FC<EmployeeTableProps> = ({ employees, workUnits = [], onEdit, onDelete, onView, onImport, sortKey, sortDirection, onSort, isViewOnly = false }) => {
+    const confirm = useConfirm();
     const fileInputRef = useRef<HTMLInputElement>(null);
     const [currentPage, setCurrentPage] = useState(1);
     const [pageSize, setPageSize] = useState(10);
@@ -72,6 +77,8 @@ const EmployeeTable: React.FC<EmployeeTableProps> = ({ employees, onEdit, onDele
                 NPWP: emp.npwp || raw.npwp || '',
                 BPJS_Kesehatan: emp.bpjsKesehatan || raw.bpjs_kesehatan || '',
                 BPJS_Ketenagakerjaan: emp.bpjsKetenagakerjaan || raw.bpjs_ketenagakerjaan || '',
+                Unit_Kerja: workUnits.find(u => u.id === (emp.unitKerjaId || raw.unitKerjaId))?.nama || emp.unitKerjaId || raw.unitKerjaId || '',
+                Agama: emp.agama || raw.agama || '',
                 Status_Nikah: emp.maritalStatus || raw.marital_status || 'Single',
                 Jumlah_Tanggungan: emp.dependents ?? raw.dependents ?? 0,
                 Alamat_KTP: address.ktp || '',
@@ -123,7 +130,13 @@ const EmployeeTable: React.FC<EmployeeTableProps> = ({ employees, onEdit, onDele
                     }
 
                     // Konfirmasi import
-                    if (!window.confirm(`Akan mengimport ${imported.length} data karyawan. Lanjutkan?`)) {
+                    const ok = await confirm({
+                        title: 'Konfirmasi Import',
+                        message: `Akan mengimport ${imported.length} data karyawan. Lanjutkan?`,
+                        confirmLabel: 'Import',
+                        variant: 'default',
+                    });
+                    if (!ok) {
                         return;
                     }
 
@@ -171,41 +184,45 @@ const EmployeeTable: React.FC<EmployeeTableProps> = ({ employees, onEdit, onDele
     return (
         <div className="bg-white p-6 rounded-xl shadow-md">
             <div className="flex justify-between items-center mb-4">
-                <h3 className="text-lg font-bold text-primary">Daftar Karyawan</h3>
-                <div className="flex gap-2">
-                    <button 
-                        onClick={createEmployeeImportTemplate} 
-                        className="px-4 py-2 bg-purple-600 text-white rounded-lg font-semibold hover:bg-purple-700 transition-colors" 
-                        aria-label="Download template Excel untuk import"
-                        title="Download Template"
-                    >
-                        📄 Template
-                    </button>
-                    <button 
-                        onClick={handleExportXLSX} 
-                        className="px-4 py-2 bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700 transition-colors" 
-                        aria-label="Export data karyawan ke Excel"
-                        title="Export ke Excel"
-                    >
-                        📥 Export XLSX
-                    </button>
-                    <button 
-                        onClick={() => fileInputRef.current?.click()} 
-                        className="px-4 py-2 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition-colors" 
-                        aria-label="Import data karyawan dari Excel"
-                        title="Import dari Excel"
-                    >
-                        📤 Import XLSX
-                    </button>
-                    <input 
-                        type="file" 
-                        accept=".xlsx,.xls" 
-                        ref={fileInputRef} 
-                        className="hidden" 
-                        onChange={handleImportXLSX}
-                        aria-label="Pilih file Excel untuk import"
-                    />
-                </div>
+                <h3 className="text-lg font-bold text-primary">
+                    {isViewOnly ? 'Data Karyawan Unit' : 'Daftar Karyawan'}
+                </h3>
+                {!isViewOnly && (
+                    <div className="flex gap-2">
+                        <button 
+                            onClick={createEmployeeImportTemplate} 
+                            className="px-4 py-2 bg-purple-600 text-white rounded-lg font-semibold hover:bg-purple-700 transition-colors" 
+                            aria-label="Download template Excel untuk import"
+                            title="Download Template"
+                        >
+                            📄 Template
+                        </button>
+                        <button 
+                            onClick={handleExportXLSX} 
+                            className="px-4 py-2 bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700 transition-colors" 
+                            aria-label="Export data karyawan ke Excel"
+                            title="Export ke Excel"
+                        >
+                            📥 Export XLSX
+                        </button>
+                        <button 
+                            onClick={() => fileInputRef.current?.click()} 
+                            className="px-4 py-2 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition-colors" 
+                            aria-label="Import data karyawan dari Excel"
+                            title="Import dari Excel"
+                        >
+                            📤 Import XLSX
+                        </button>
+                        <input 
+                            type="file" 
+                            accept=".xlsx,.xls" 
+                            ref={fileInputRef} 
+                            className="hidden" 
+                            onChange={handleImportXLSX}
+                            aria-label="Pilih file Excel untuk import"
+                        />
+                    </div>
+                )}
             </div>
             <div className="overflow-x-auto">
                 <table className="min-w-full divide-y divide-gray-200">
@@ -287,22 +304,26 @@ const EmployeeTable: React.FC<EmployeeTableProps> = ({ employees, onEdit, onDele
                                     >
                                         <EyeIcon className="h-5 w-5" />
                                     </button>
-                                    <button 
-                                        onClick={() => onEdit(employee)} 
-                                        className="p-2 text-gray-400 hover:text-[#06736a] rounded-full hover:bg-[#e6f3f2] ml-2"
-                                        aria-label={`Edit ${employee.nama}`}
-                                        title="Edit Karyawan"
-                                    >
-                                        <PencilIcon className="h-5 w-5" />
-                                    </button>
-                                    <button 
-                                        onClick={() => onDelete(employee.id)} 
-                                        className="p-2 text-gray-400 hover:text-danger rounded-full hover:bg-red-50 ml-2"
-                                        aria-label={`Hapus ${employee.nama}`}
-                                        title="Hapus Karyawan"
-                                    >
-                                        <TrashIcon className="h-5 w-5" />
-                                    </button>
+                                    {!isViewOnly && (
+                                        <>
+                                            <button 
+                                                onClick={() => onEdit(employee)} 
+                                                className="p-2 text-gray-400 hover:text-[#06736a] rounded-full hover:bg-[#e6f3f2] ml-2"
+                                                aria-label={`Edit ${employee.nama}`}
+                                                title="Edit Karyawan"
+                                            >
+                                                <PencilIcon className="h-5 w-5" />
+                                            </button>
+                                            <button 
+                                                onClick={() => onDelete(employee.id)} 
+                                                className="p-2 text-gray-400 hover:text-danger rounded-full hover:bg-red-50 ml-2"
+                                                aria-label={`Hapus ${employee.nama}`}
+                                                title="Hapus Karyawan"
+                                            >
+                                                <TrashIcon className="h-5 w-5" />
+                                            </button>
+                                        </>
+                                    )}
                                 </td>
                             </tr>
                         ))}
@@ -318,7 +339,7 @@ const EmployeeTable: React.FC<EmployeeTableProps> = ({ employees, onEdit, onDele
                         <label className="text-sm text-gray-600" htmlFor="employee-page-size">Baris:</label>
                         <select
                             id="employee-page-size"
-                            className="border border-gray-300 rounded-md px-2 py-1 text-sm"
+                            className="border border-gray-300 rounded-lg px-2 py-1 text-sm"
                             value={pageSize}
                             onChange={(e) => handlePageSizeChange(Number(e.target.value))}
                         >
@@ -329,7 +350,7 @@ const EmployeeTable: React.FC<EmployeeTableProps> = ({ employees, onEdit, onDele
                         <button
                             onClick={goToPrevPage}
                             disabled={currentPage === 1}
-                            className="px-3 py-1.5 text-sm rounded-md border border-gray-300 disabled:opacity-50 disabled:cursor-not-allowed"
+                            className="px-3 py-1.5 text-sm rounded-lg border border-gray-300 disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                             Sebelumnya
                         </button>
@@ -337,7 +358,7 @@ const EmployeeTable: React.FC<EmployeeTableProps> = ({ employees, onEdit, onDele
                         <button
                             onClick={goToNextPage}
                             disabled={currentPage === totalPages}
-                            className="px-3 py-1.5 text-sm rounded-md border border-gray-300 disabled:opacity-50 disabled:cursor-not-allowed"
+                            className="px-3 py-1.5 text-sm rounded-lg border border-gray-300 disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                             Berikutnya
                         </button>
@@ -345,9 +366,11 @@ const EmployeeTable: React.FC<EmployeeTableProps> = ({ employees, onEdit, onDele
                 </div>
             )}
             {employees.length === 0 && (
-                <div className="text-center py-10 text-gray-500">
-                    Tidak ada data karyawan yang cocok dengan filter.
-                </div>
+                <EmptyState
+                    icon={<span className="text-5xl">👥</span>}
+                    title="Tidak ada karyawan"
+                    description="Belum ada data karyawan yang cocok dengan filter pencarian Anda. Coba ubah kriteria pencarian atau tambahkan karyawan baru."
+                />
             )}
         </div>
     );

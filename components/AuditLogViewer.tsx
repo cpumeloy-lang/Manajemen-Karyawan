@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from '../services/supabaseClient';
 
 const AUDIT_LOG_UNAVAILABLE_CACHE_KEY = 'hrms.audit_logs_unavailable';
+const AUDIT_LOG_ALL_SOURCES_UNAVAILABLE_CACHE_KEY = 'hrms.audit_logs_all_sources_unavailable';
 
 const getCachedAuditLogUnavailable = (): boolean => {
     try {
@@ -23,12 +24,33 @@ const setCachedAuditLogUnavailable = (isUnavailable: boolean): void => {
     }
 };
 
+const getCachedAllAuditSourcesUnavailable = (): boolean => {
+    try {
+        return localStorage.getItem(AUDIT_LOG_ALL_SOURCES_UNAVAILABLE_CACHE_KEY) === '1';
+    } catch {
+        return false;
+    }
+};
+
+const setCachedAllAuditSourcesUnavailable = (isUnavailable: boolean): void => {
+    try {
+        if (isUnavailable) {
+            localStorage.setItem(AUDIT_LOG_ALL_SOURCES_UNAVAILABLE_CACHE_KEY, '1');
+        } else {
+            localStorage.removeItem(AUDIT_LOG_ALL_SOURCES_UNAVAILABLE_CACHE_KEY);
+        }
+    } catch {
+        // Ignore storage access errors.
+    }
+};
+
 interface AuditLog {
     id: string;
     user_id: string;
     user_email: string;
     user_name: string;
     action: 'CREATE' | 'UPDATE' | 'DELETE';
+    portal_type?: 'personal' | 'operational' | 'unknown' | string;
     entity_type: string;
     entity_id: string | null;
     entity_name: string | null;
@@ -41,23 +63,43 @@ interface AuditLog {
     created_at: string;
 }
 
+interface BiometricAuditLogRow {
+    id: string;
+    employee_id: string | null;
+    device_id: string | null;
+    action: string;
+    status: string | null;
+    metadata: any;
+    user_agent: string | null;
+    ip_address: string | null;
+    created_at: string;
+}
+
 interface AuditLogViewerProps {
     onClose?: () => void;
     isInline?: boolean;
 }
 
+const getLogPortalType = (log: AuditLog): string => {
+    return log.portal_type || log.changes?.metadata?.portal_type || 'unknown';
+};
+
 const AuditLogViewer: React.FC<AuditLogViewerProps> = ({ onClose, isInline = false }) => {
     const [logs, setLogs] = useState<AuditLog[]>([]);
     const [loading, setLoading] = useState(true);
     const [auditLogUnavailable, setAuditLogUnavailable] = useState(getCachedAuditLogUnavailable);
+    const [allAuditSourcesUnavailable, setAllAuditSourcesUnavailable] = useState(getCachedAllAuditSourcesUnavailable);
     const [auditLogUnavailableMessage, setAuditLogUnavailableMessage] = useState(
-        getCachedAuditLogUnavailable()
+        getCachedAllAuditSourcesUnavailable()
+            ? 'Tabel audit_logs dan biometric_audit_log belum tersedia. Jalankan script setup audit log lalu klik Coba Lagi.'
+            : getCachedAuditLogUnavailable()
             ? 'Tabel audit_logs belum tersedia. Jalankan script setup audit log terlebih dahulu.'
             : ''
     );
     const [filter, setFilter] = useState({
         action: 'ALL',
         entity_type: 'ALL',
+        portal_type: 'ALL',
         user_email: 'ALL',
         date_from: '',
         date_to: '',
@@ -67,16 +109,109 @@ const AuditLogViewer: React.FC<AuditLogViewerProps> = ({ onClose, isInline = fal
 
     useEffect(() => {
         fetchAuditLogs();
-    }, [filter, auditLogUnavailable]);
+    }, [filter]);
 
-    const fetchAuditLogs = async () => {
-        if (auditLogUnavailable) {
-            setLoading(false);
-            return;
+    const mapBiometricToAuditLog = (row: BiometricAuditLogRow): AuditLog => {
+        const mappedAction: AuditLog['action'] =
+            row.action === 'device_registered' ? 'CREATE' :
+            row.action === 'device_removed' ? 'DELETE' :
+            'UPDATE';
+
+        return {
+            id: row.id,
+            user_id: row.employee_id || '',
+            user_email: 'system@local',
+            user_name: 'System',
+            action: mappedAction,
+            portal_type: 'operational',
+            entity_type: 'biometric_device',
+            entity_id: row.device_id || row.employee_id,
+            entity_name: row.metadata?.device_name || 'Biometric Device Event',
+            old_data: mappedAction === 'DELETE' ? row.metadata : null,
+            new_data: mappedAction === 'CREATE' ? row.metadata : null,
+            changes:
+                mappedAction === 'UPDATE'
+                    ? {
+                          source_action: row.action,
+                          metadata: {
+                              ...(row.metadata || {}),
+                              portal_type: 'operational',
+                          },
+                      }
+                    : {
+                          metadata: {
+                              ...(row.metadata || {}),
+                              portal_type: 'operational',
+                          },
+                      },
+            description: `Biometric event: ${row.action}`,
+            ip_address: row.ip_address,
+            user_agent: row.user_agent,
+            created_at: row.created_at,
+        };
+    };
+
+    const applyClientFilters = (items: AuditLog[]): AuditLog[] => {
+        return items.filter((item) => {
+            if (filter.action !== 'ALL' && item.action !== filter.action) return false;
+            if (filter.entity_type !== 'ALL' && item.entity_type !== filter.entity_type) return false;
+            if (filter.portal_type !== 'ALL' && getLogPortalType(item) !== filter.portal_type) return false;
+            if (filter.user_email !== 'ALL' && item.user_email !== filter.user_email) return false;
+            if (filter.search) {
+                const needle = filter.search.toLowerCase();
+                const hay = `${item.description || ''} ${item.entity_name || ''}`.toLowerCase();
+                if (!hay.includes(needle)) return false;
+            }
+            return true;
+        });
+    };
+
+    const fetchBiometricAuditLogsFallback = async (): Promise<void> => {
+        let query = (supabase as any)
+            .from('biometric_audit_log')
+            .select('*')
+            .order('created_at', { ascending: false })
+            .limit(500);
+
+        if (filter.date_from) {
+            query = query.gte('created_at', filter.date_from);
+        }
+        if (filter.date_to) {
+            query = query.lte('created_at', filter.date_to);
         }
 
+        const { data, error } = await query;
+        if (error) throw error;
+
+        const mapped = (data || []).map((row) => mapBiometricToAuditLog(row as unknown as BiometricAuditLogRow));
+        setLogs(applyClientFilters(mapped));
+    };
+
+    const fetchAuditLogs = async () => {
         setLoading(true);
         try {
+            if (allAuditSourcesUnavailable) {
+                setLogs([]);
+                setAuditLogUnavailableMessage('Tabel audit_logs dan biometric_audit_log belum tersedia. Jalankan script setup audit log lalu klik Coba Lagi.');
+                return;
+            }
+
+            if (auditLogUnavailable) {
+                try {
+                    await fetchBiometricAuditLogsFallback();
+                    setAuditLogUnavailableMessage('Tabel audit_logs belum tersedia. Menampilkan data dari biometric_audit_log sebagai fallback.');
+                    setAllAuditSourcesUnavailable(false);
+                    setCachedAllAuditSourcesUnavailable(false);
+                } catch (fallbackError: any) {
+                    setLogs([]);
+                    setAuditLogUnavailableMessage('Tabel audit_logs dan biometric_audit_log belum tersedia. Jalankan script setup audit log lalu klik Coba Lagi.');
+                    setAllAuditSourcesUnavailable(true);
+                    setCachedAllAuditSourcesUnavailable(true);
+                    console.warn('Fallback audit log source unavailable:', fallbackError);
+                }
+                return;
+            }
+
             let query = supabase
                 .from('audit_logs')
                 .select('*')
@@ -93,6 +228,9 @@ const AuditLogViewer: React.FC<AuditLogViewerProps> = ({ onClose, isInline = fal
             if (filter.user_email !== 'ALL') {
                 query = query.eq('user_email', filter.user_email);
             }
+            if (filter.portal_type !== 'ALL') {
+                query = query.eq('portal_type', filter.portal_type);
+            }
             if (filter.date_from) {
                 query = query.gte('created_at', filter.date_from);
             }
@@ -106,14 +244,29 @@ const AuditLogViewer: React.FC<AuditLogViewerProps> = ({ onClose, isInline = fal
             const { data, error } = await query;
 
             if (error) throw error;
-            setLogs(data || []);
+            setLogs((data || []) as unknown as AuditLog[]);
+            if (auditLogUnavailable) {
+                setCachedAuditLogUnavailable(false);
+                setAuditLogUnavailable(false);
+                setAuditLogUnavailableMessage('');
+            }
         } catch (error: any) {
             // Supabase/PostgREST code for relation/table not found
             if (error?.code === 'PGRST205' || error?.message?.includes('audit_logs')) {
                 setAuditLogUnavailable(true);
                 setCachedAuditLogUnavailable(true);
-                setAuditLogUnavailableMessage('Tabel audit_logs belum tersedia. Jalankan script setup audit log terlebih dahulu.');
-                setLogs([]);
+                try {
+                    await fetchBiometricAuditLogsFallback();
+                    setAuditLogUnavailableMessage('Tabel audit_logs belum tersedia. Menampilkan data dari biometric_audit_log sebagai fallback.');
+                    setAllAuditSourcesUnavailable(false);
+                    setCachedAllAuditSourcesUnavailable(false);
+                } catch (fallbackError: any) {
+                    setLogs([]);
+                    setAuditLogUnavailableMessage('Tabel audit_logs dan biometric_audit_log belum tersedia. Jalankan script setup audit log lalu klik Coba Lagi.');
+                    setAllAuditSourcesUnavailable(true);
+                    setCachedAllAuditSourcesUnavailable(true);
+                    console.warn('Fallback audit log source unavailable:', fallbackError);
+                }
                 return;
             }
 
@@ -126,7 +279,9 @@ const AuditLogViewer: React.FC<AuditLogViewerProps> = ({ onClose, isInline = fal
 
     const handleRetryAfterSetup = () => {
         setCachedAuditLogUnavailable(false);
+        setCachedAllAuditSourcesUnavailable(false);
         setAuditLogUnavailable(false);
+        setAllAuditSourcesUnavailable(false);
         setAuditLogUnavailableMessage('');
         fetchAuditLogs();
     };
@@ -202,6 +357,7 @@ const AuditLogViewer: React.FC<AuditLogViewerProps> = ({ onClose, isInline = fal
 
     const uniqueUsers = [...new Set(logs.map(log => log.user_email))];
     const uniqueEntityTypes = [...new Set(logs.map(log => log.entity_type))];
+    const uniquePortalTypes = [...new Set(logs.map(log => getLogPortalType(log)))];
 
     return (
         <div className={isInline ? 'w-full' : 'fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4'}>
@@ -280,6 +436,22 @@ const AuditLogViewer: React.FC<AuditLogViewerProps> = ({ onClose, isInline = fal
                         </div>
 
                         <div>
+                            <label htmlFor="audit-filter-portal-type" className="block text-xs font-medium text-gray-700 mb-1">Portal</label>
+                            <select
+                                id="audit-filter-portal-type"
+                                title="Filter portal audit log"
+                                value={filter.portal_type}
+                                onChange={(e) => setFilter({ ...filter, portal_type: e.target.value })}
+                                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#06736a] focus:border-transparent"
+                            >
+                                <option value="ALL">Semua Portal</option>
+                                {uniquePortalTypes.map(portal => (
+                                    <option key={portal as string} value={portal as string}>{String(portal).toUpperCase()}</option>
+                                ))}
+                            </select>
+                        </div>
+
+                        <div>
                             <label htmlFor="audit-filter-date-from" className="block text-xs font-medium text-gray-700 mb-1">Dari Tanggal</label>
                             <input
                                 id="audit-filter-date-from"
@@ -323,7 +495,7 @@ const AuditLogViewer: React.FC<AuditLogViewerProps> = ({ onClose, isInline = fal
                             <span>{auditLogUnavailableMessage}</span>
                             <button
                                 onClick={handleRetryAfterSetup}
-                                className="px-3 py-1.5 text-xs font-semibold rounded-md bg-yellow-100 hover:bg-yellow-200 text-yellow-900"
+                                className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-yellow-100 hover:bg-yellow-200 text-yellow-900"
                             >
                                 Coba Lagi
                             </button>
@@ -360,6 +532,9 @@ const AuditLogViewer: React.FC<AuditLogViewerProps> = ({ onClose, isInline = fal
                                                         </span>
                                                         <span className="px-2 py-1 rounded text-xs font-semibold bg-gray-100 text-gray-800">
                                                             {getEntityTypeLabel(log.entity_type)}
+                                                        </span>
+                                                        <span className="px-2 py-1 rounded text-xs font-semibold bg-emerald-50 text-emerald-700">
+                                                            {getLogPortalType(log).toUpperCase()}
                                                         </span>
                                                     </div>
                                                     <p className="text-sm font-medium text-gray-800 mb-1">

@@ -261,7 +261,7 @@ const Login: React.FC<LoginProps> = ({ onLogin, initialError }) => {
                                             required
                                             value={email}
                                             onChange={(e) => setEmail(e.target.value)}
-                                            className="block w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-slate-900 shadow-sm outline-none transition focus:border-[#06736a] focus:ring-4 focus:ring-[#06736a]/10"
+                                            className="block w-full rounded-lg border border-slate-200 bg-white px-4 py-3 text-slate-900 shadow-sm outline-none transition focus:border-[#06736a] focus:ring-4 focus:ring-[#06736a]/10"
                                             placeholder="nama@perusahaan.com"
                                         />
                                     </div>
@@ -280,14 +280,14 @@ const Login: React.FC<LoginProps> = ({ onLogin, initialError }) => {
                                             required
                                             value={password}
                                             onChange={(e) => setPassword(e.target.value)}
-                                            className="block w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-slate-900 shadow-sm outline-none transition focus:border-[#06736a] focus:ring-4 focus:ring-[#06736a]/10"
+                                            className="block w-full rounded-lg border border-slate-200 bg-white px-4 py-3 text-slate-900 shadow-sm outline-none transition focus:border-[#06736a] focus:ring-4 focus:ring-[#06736a]/10"
                                             placeholder="Masukkan password"
                                         />
                                     </div>
                                 </div>
 
                                 {error && (
-                                    <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+                                    <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
                                         <p>{error}</p>
                                     </div>
                                 )}
@@ -295,7 +295,7 @@ const Login: React.FC<LoginProps> = ({ onLogin, initialError }) => {
                                 <button
                                     type="submit"
                                     disabled={loading}
-                                    className="flex w-full items-center justify-center rounded-2xl bg-[#06736a] px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-[#06736a]/30 transition hover:bg-[#054f46] focus:outline-none focus:ring-4 focus:ring-[#06736a]/20 disabled:bg-slate-400"
+                                    className="flex w-full items-center justify-center rounded-lg bg-[#06736a] px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-[#06736a]/30 transition hover:bg-[#054f46] focus:outline-none focus:ring-4 focus:ring-[#06736a]/20 disabled:bg-slate-400"
                                 >
                                     {loading ? (
                                         <div className="flex items-center">

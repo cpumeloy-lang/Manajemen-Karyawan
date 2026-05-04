@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Employee, WorkUnit } from '../types.ts';
+import { Employee, WorkUnit, ShiftDefinition, DEFAULT_SHIFT_DEFINITIONS } from '../types.ts';
 import { supabase } from '../services/supabaseClient.ts';
 import { UserGroupIcon, ClockIcon, CalendarDaysIcon } from './icons.tsx';
 import LoadingSpinner from './LoadingSpinner.tsx';
@@ -12,7 +12,12 @@ interface KepalaRuanganDashboardProps {
 }
 
 const KepalaRuanganDashboard: React.FC<KepalaRuanganDashboardProps> = ({ kepalaRuangan, onNavigate }) => {
-    const managedUnitId = kepalaRuangan.unitKerjaId || kepalaRuangan.managedUnitId;
+    const kepalaAny = kepalaRuangan as any;
+    const managedUnitId = kepalaRuangan.unitKerjaId
+        || kepalaAny.unit_kerja_id
+        || kepalaRuangan.managedUnitId
+        || kepalaAny.managed_unit_id;
+
     const [unitData, setUnitData] = useState<{
         workUnit: WorkUnit | null;
         employees: Employee[];
@@ -22,10 +27,16 @@ const KepalaRuanganDashboard: React.FC<KepalaRuanganDashboardProps> = ({ kepalaR
             absentToday: number;
             onLeave: number;
         };
-        shiftStats: {
-            pagi: number;
-            siang: number;
-            malam: number;
+        shiftStats: Record<string, number>;
+        unitShifts: ShiftDefinition[];
+        todayScheduleMap: Record<string, string>;
+        scheduleInfo: {
+            totalSchedules: number;
+            draftCount: number;
+            publishedCount: number;
+            offDayCount: number;
+            coveragePercent: number;
+            monthLabel: string;
         };
     } | null>(null);
     const [loading, setLoading] = useState(true);
@@ -56,11 +67,29 @@ const KepalaRuanganDashboard: React.FC<KepalaRuanganDashboardProps> = ({ kepalaR
         window.addEventListener('focus', handleWindowFocus);
         document.addEventListener('visibilitychange', handleVisibilityChange);
 
+        // Realtime subscription — deteksi langsung saat karyawan ditambah/diedit/dihapus di unit ini
+        const realtimeChannel = supabase
+            .channel(`unit-employees-${managedUnitId}`)
+            .on(
+                'postgres_changes',
+                { event: '*', schema: 'public', table: 'employees' },
+                (payload) => {
+                    if (!isActive) return;
+                    const record = (payload.new || payload.old) as any;
+                    const recordUnitId = record?.unitKerjaId || record?.unit_kerja_id;
+                    if (!recordUnitId || recordUnitId === managedUnitId) {
+                        refreshDashboard(true);
+                    }
+                }
+            )
+            .subscribe();
+
         return () => {
             isActive = false;
             window.clearInterval(intervalId);
             window.removeEventListener('focus', handleWindowFocus);
             document.removeEventListener('visibilitychange', handleVisibilityChange);
+            void supabase.removeChannel(realtimeChannel);
         };
     }, [managedUnitId]);
 
@@ -68,25 +97,35 @@ const KepalaRuanganDashboard: React.FC<KepalaRuanganDashboardProps> = ({ kepalaR
         String(status || '').trim().toLowerCase();
 
     const loadEmployeesByUnit = async (unitId: string): Promise<any[]> => {
+        console.log('[Dashboard] loadEmployeesByUnit unitId:', unitId);
+
         const camelCaseQuery = await supabase
             .from('employees')
             .select('*')
             .eq('unitKerjaId', unitId);
 
-        if (!camelCaseQuery.error) {
-            return (camelCaseQuery.data as any[]) || [];
+        console.log('[Dashboard] camelCase query error:', camelCaseQuery.error, 'count:', camelCaseQuery.data?.length);
+
+        if (!camelCaseQuery.error && camelCaseQuery.data && camelCaseQuery.data.length > 0) {
+            return camelCaseQuery.data as any[];
         }
 
-        const snakeCaseQuery = await supabase
+        const snakeCaseQuery = await (supabase as any)
             .from('employees')
             .select('*')
             .eq('unit_kerja_id', unitId);
 
-        if (snakeCaseQuery.error) {
+        console.log('[Dashboard] snake_case query error:', snakeCaseQuery.error, 'count:', snakeCaseQuery.data?.length);
+
+        if (!snakeCaseQuery.error && snakeCaseQuery.data && snakeCaseQuery.data.length > 0) {
+            return snakeCaseQuery.data as any[];
+        }
+
+        if (camelCaseQuery.error && snakeCaseQuery.error) {
             throw snakeCaseQuery.error;
         }
 
-        return (snakeCaseQuery.data as any[]) || [];
+        return [];
     };
 
     const loadTodayAttendance = async (employeeIds: string[], today: string) => {
@@ -197,15 +236,72 @@ const KepalaRuanganDashboard: React.FC<KepalaRuanganDashboardProps> = ({ kepalaR
                 return normalized === 'absen';
             }).length;
 
-            // Calculate shift stats
-            const shiftStats = {
-                pagi: activeEmployees.filter(emp => emp.shift === 'Pagi').length,
-                siang: activeEmployees.filter(emp => emp.shift === 'Siang').length,
-                malam: activeEmployees.filter(emp => emp.shift === 'Malam').length,
-            };
+            // Load unit shift definitions (dynamic)
+            const unitDataAny = workUnitData as any;
+            const unitShifts: ShiftDefinition[] = (unitDataAny?.shifts && unitDataAny.shifts.length > 0)
+                ? unitDataAny.shifts as ShiftDefinition[]
+                : DEFAULT_SHIFT_DEFINITIONS;
+
+            // Try to load today's per-date schedules for more accurate stats
+            let todayScheduleMap: Record<string, string> = {};
+            try {
+                const { data: todayScheds } = await supabase
+                    .from('employee_schedules')
+                    .select('employee_id, shift_name, is_off_day')
+                    .eq('unit_id', managedUnitId)
+                    .eq('schedule_date', today)
+                    .neq('status', 'cancelled') as any;
+                if (todayScheds && todayScheds.length > 0) {
+                    (todayScheds as any[]).forEach((s: any) => {
+                        todayScheduleMap[s.employee_id] = s.is_off_day ? 'Libur' : s.shift_name;
+                    });
+                }
+            } catch { /* table may not exist yet, fallback gracefully */ }
+
+            // Calculate shift stats dynamically (prefer per-date schedule, fallback to employee.shift)
+            const shiftStats: Record<string, number> = {};
+            unitShifts.forEach(s => { shiftStats[s.name] = 0; });
+            shiftStats['Libur'] = 0;
+            activeEmployees.forEach(emp => {
+                const name = todayScheduleMap[emp.id] || emp.shift || 'Tidak Diatur';
+                shiftStats[name] = (shiftStats[name] || 0) + 1;
+            });
+            // Clean up zero-count entries
+            Object.keys(shiftStats).forEach(k => { if (shiftStats[k] === 0) delete shiftStats[k]; });
+
+            // Load current month schedule summary
+            const now = new Date();
+            const monthStart = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
+            const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+            const monthEnd = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+            const monthNames = ['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
+            const monthLabel = `${monthNames[now.getMonth()]} ${now.getFullYear()}`;
+
+            let scheduleInfo = { totalSchedules: 0, draftCount: 0, publishedCount: 0, offDayCount: 0, coveragePercent: 0, monthLabel };
+            try {
+                const { data: monthScheds } = await supabase
+                    .from('employee_schedules')
+                    .select('id, status, is_off_day')
+                    .eq('unit_id', managedUnitId)
+                    .gte('schedule_date', monthStart)
+                    .lte('schedule_date', monthEnd)
+                    .neq('status', 'cancelled') as any;
+                if (monthScheds && monthScheds.length > 0) {
+                    const arr = monthScheds as any[];
+                    const totalSlots = activeEmployees.length * lastDay;
+                    scheduleInfo = {
+                        totalSchedules: arr.length,
+                        draftCount: arr.filter((s: any) => s.status === 'draft').length,
+                        publishedCount: arr.filter((s: any) => s.status === 'published').length,
+                        offDayCount: arr.filter((s: any) => s.is_off_day).length,
+                        coveragePercent: totalSlots > 0 ? Math.round((arr.length / totalSlots) * 100) : 0,
+                        monthLabel,
+                    };
+                }
+            } catch { /* table may not exist yet */ }
 
             setUnitData({
-                workUnit: workUnitData,
+                workUnit: workUnitData as unknown as WorkUnit,
                 employees: activeEmployees,
                 attendanceStats: {
                     totalEmployees: activeEmployees.length,
@@ -214,6 +310,9 @@ const KepalaRuanganDashboard: React.FC<KepalaRuanganDashboardProps> = ({ kepalaR
                     onLeave,
                 },
                 shiftStats,
+                unitShifts,
+                todayScheduleMap,
+                scheduleInfo,
             });
             setLastUpdated(new Date());
 
@@ -285,7 +384,7 @@ const KepalaRuanganDashboard: React.FC<KepalaRuanganDashboardProps> = ({ kepalaR
         );
     }
 
-    const { workUnit, employees, attendanceStats, shiftStats } = unitData;
+    const { workUnit, employees, attendanceStats, shiftStats, unitShifts, todayScheduleMap, scheduleInfo } = unitData;
 
     return (
         <div className="space-y-6">
@@ -341,34 +440,226 @@ const KepalaRuanganDashboard: React.FC<KepalaRuanganDashboardProps> = ({ kepalaR
                     subtitle="Absen + Cuti/Sakit"
                 />
                 <InfoCard
-                    title="Shift Pagi"
-                    value={shiftStats.pagi}
+                    title="Jenis Shift"
+                    value={Object.keys(shiftStats).length}
                     icon={<CalendarDaysIcon className="h-8 w-8" />}
                     color="text-yellow-600"
-                    subtitle="Karyawan"
+                    subtitle="Terkonfigurasi"
                 />
             </div>
 
             {/* Shift Distribution */}
             <div className="bg-white p-6 rounded-xl shadow-md">
                 <h2 className="text-xl font-bold text-[#06736a] mb-4">📊 Distribusi Shift Unit</h2>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div className="text-center p-4 bg-yellow-50 rounded-lg border border-yellow-200">
-                        <div className="text-2xl font-bold text-yellow-700">{shiftStats.pagi}</div>
-                        <div className="text-sm text-yellow-600">Shift Pagi</div>
-                        <div className="text-xs text-gray-500 mt-1">06:00 - 14:00</div>
-                    </div>
-                    <div className="text-center p-4 bg-blue-50 rounded-lg border border-blue-200">
-                        <div className="text-2xl font-bold text-blue-700">{shiftStats.siang}</div>
-                        <div className="text-sm text-blue-600">Shift Siang</div>
-                        <div className="text-xs text-gray-500 mt-1">14:00 - 22:00</div>
-                    </div>
-                    <div className="text-center p-4 bg-indigo-50 rounded-lg border border-indigo-200">
-                        <div className="text-2xl font-bold text-indigo-700">{shiftStats.malam}</div>
-                        <div className="text-sm text-indigo-600">Shift Malam</div>
-                        <div className="text-xs text-gray-500 mt-1">22:00 - 06:00</div>
-                    </div>
+                <div className={`grid grid-cols-1 gap-4 ${Object.keys(shiftStats).length <= 3 ? 'md:grid-cols-3' : 'md:grid-cols-2 lg:grid-cols-4'}`}>
+                    {Object.entries(shiftStats).map(([name, count]) => {
+                        const def = unitShifts.find(s => s.name === name);
+                        const colorMap: Record<string, { bg: string; text: string; border: string }> = {
+                            yellow:  { bg: 'bg-yellow-50',  text: 'text-yellow-700',  border: 'border-yellow-200' },
+                            blue:    { bg: 'bg-blue-50',    text: 'text-blue-700',    border: 'border-blue-200' },
+                            indigo:  { bg: 'bg-indigo-50',  text: 'text-indigo-700',  border: 'border-indigo-200' },
+                            green:   { bg: 'bg-green-50',   text: 'text-green-700',   border: 'border-green-200' },
+                            red:     { bg: 'bg-red-50',     text: 'text-red-700',     border: 'border-red-200' },
+                            purple:  { bg: 'bg-purple-50',  text: 'text-purple-700',  border: 'border-purple-200' },
+                            orange:  { bg: 'bg-orange-50',  text: 'text-orange-700',  border: 'border-orange-200' },
+                            pink:    { bg: 'bg-pink-50',    text: 'text-pink-700',    border: 'border-pink-200' },
+                            teal:    { bg: 'bg-teal-50',    text: 'text-teal-700',    border: 'border-teal-200' },
+                            gray:    { bg: 'bg-gray-50',    text: 'text-gray-700',    border: 'border-gray-200' },
+                        };
+                        const c = colorMap[def?.color || 'gray'] || colorMap['gray'];
+                        const timeLabel = def?.type === 'rotating'
+                            ? `${def.startTime || '?'} - ${def.endTime || '?'}`
+                            : def?.type === 'fixed' ? 'Jadwal per hari' : '';
+                        return (
+                            <div key={name} className={`text-center p-4 rounded-lg border ${c.bg} ${c.border}`}>
+                                <div className={`text-2xl font-bold ${c.text}`}>{count}</div>
+                                <div className={`text-sm font-medium ${c.text}`}>{name}</div>
+                                {timeLabel && <div className="text-xs text-gray-500 mt-1">{timeLabel}</div>}
+                            </div>
+                        );
+                    })}
                 </div>
+            </div>
+
+            {/* Ringkasan Jadwal Shift Bulan Ini */}
+            <div className="bg-white p-6 rounded-xl shadow-md">
+                <div className="flex items-center justify-between mb-4">
+                    <h2 className="text-xl font-bold text-[#06736a]">📋 Jadwal Shift — {scheduleInfo.monthLabel}</h2>
+                    <button
+                        onClick={() => onNavigate?.('unit-schedule')}
+                        className="text-sm text-primary font-medium hover:underline"
+                    >
+                        Buka Manajemen Jadwal →
+                    </button>
+                </div>
+
+                {scheduleInfo.totalSchedules === 0 ? (
+                    <div className="bg-amber-50 border border-amber-200 rounded-lg p-5">
+                        <p className="text-amber-800 font-semibold mb-2">⚠️ Jadwal bulan ini belum di-generate</p>
+                        <p className="text-sm text-amber-700 mb-3">
+                            Belum ada jadwal harian yang dibuat untuk karyawan di unit ini.
+                            Gunakan fitur <strong>Manajemen Jadwal Shift</strong> untuk membuat jadwal otomatis.
+                        </p>
+                        <div className="bg-white rounded-lg p-4 border border-amber-100">
+                            <p className="text-xs font-semibold text-gray-700 mb-2">📌 Langkah Membuat Jadwal:</p>
+                            <ol className="text-xs text-gray-600 space-y-1.5 list-decimal list-inside">
+                                <li><strong>Konfigurasi Shift</strong> — Definisikan jenis shift (Pagi, Siang, Malam, dll) beserta jam kerja</li>
+                                <li><strong>Buat Pola Rotasi</strong> — Buat template siklus seperti P-P-S-S-M-M-L-L</li>
+                                <li><strong>Generate Jadwal</strong> — Pilih pola rotasi dan klik "Generate Jadwal" untuk mengisi otomatis</li>
+                                <li><strong>Sesuaikan</strong> — Edit jadwal per karyawan per tanggal jika perlu</li>
+                                <li><strong>Publish</strong> — Publikasi jadwal agar aktif untuk validasi absensi</li>
+                            </ol>
+                        </div>
+                        <button
+                            onClick={() => onNavigate?.('unit-schedule')}
+                            className="mt-4 px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-dark transition-colors"
+                        >
+                            📅 Buka Manajemen Jadwal
+                        </button>
+                    </div>
+                ) : (
+                    <>
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+                            <div className="bg-blue-50 border border-blue-100 rounded-lg p-3 text-center">
+                                <div className="text-2xl font-bold text-blue-700">{scheduleInfo.totalSchedules}</div>
+                                <div className="text-xs text-blue-600 font-medium">Total Jadwal</div>
+                            </div>
+                            <div className="bg-amber-50 border border-amber-100 rounded-lg p-3 text-center">
+                                <div className="text-2xl font-bold text-amber-700">{scheduleInfo.draftCount}</div>
+                                <div className="text-xs text-amber-600 font-medium">Draft</div>
+                            </div>
+                            <div className="bg-green-50 border border-green-100 rounded-lg p-3 text-center">
+                                <div className="text-2xl font-bold text-green-700">{scheduleInfo.publishedCount}</div>
+                                <div className="text-xs text-green-600 font-medium">Published</div>
+                            </div>
+                            <div className="bg-gray-50 border border-gray-100 rounded-lg p-3 text-center">
+                                <div className="text-2xl font-bold text-gray-600">{scheduleInfo.offDayCount}</div>
+                                <div className="text-xs text-gray-500 font-medium">Hari Libur</div>
+                            </div>
+                        </div>
+
+                        {/* Coverage bar */}
+                        <div className="mb-3">
+                            <div className="flex justify-between text-xs text-gray-500 mb-1">
+                                <span>Coverage Jadwal</span>
+                                <span className="font-semibold">{scheduleInfo.coveragePercent}%</span>
+                            </div>
+                            <div className="w-full h-2 bg-gray-200 rounded-full overflow-hidden">
+                                <div
+                                    className={`h-full rounded-full transition-all ${
+                                        scheduleInfo.coveragePercent >= 90 ? 'bg-green-500' :
+                                        scheduleInfo.coveragePercent >= 50 ? 'bg-amber-400' : 'bg-red-400'
+                                    }`}
+                                    style={{ width: `${Math.min(scheduleInfo.coveragePercent, 100)}%` }}
+                                />
+                            </div>
+                        </div>
+
+                        {/* Alerts */}
+                        {scheduleInfo.draftCount > 0 && (
+                            <div className="flex items-start gap-2 p-3 bg-amber-50 border border-amber-200 rounded-lg text-xs">
+                                <span className="text-amber-500 text-base">⏳</span>
+                                <div>
+                                    <p className="text-amber-800 font-semibold">{scheduleInfo.draftCount} jadwal masih berstatus Draft</p>
+                                    <p className="text-amber-700 mt-0.5">Publish jadwal agar aktif untuk validasi absensi karyawan.</p>
+                                </div>
+                            </div>
+                        )}
+                        {scheduleInfo.coveragePercent < 100 && scheduleInfo.coveragePercent > 0 && (
+                            <div className="flex items-start gap-2 p-3 bg-blue-50 border border-blue-200 rounded-lg text-xs mt-2">
+                                <span className="text-blue-500 text-base">💡</span>
+                                <div>
+                                    <p className="text-blue-800 font-semibold">Jadwal belum lengkap ({scheduleInfo.coveragePercent}%)</p>
+                                    <p className="text-blue-700 mt-0.5">Beberapa karyawan belum memiliki jadwal di seluruh hari kerja bulan ini.</p>
+                                </div>
+                            </div>
+                        )}
+                    </>
+                )}
+            </div>
+
+            {/* Jadwal Hari Ini — Siapa Bertugas */}
+            <div className="bg-white p-6 rounded-xl shadow-md">
+                <h2 className="text-xl font-bold text-[#06736a] mb-4">🕐 Jadwal Hari Ini</h2>
+                {Object.keys(todayScheduleMap).length > 0 && (
+                    <p className="text-[10px] text-green-600 mb-3 flex items-center gap-1">
+                        <span className="w-1.5 h-1.5 rounded-full bg-green-500 inline-block" />
+                        Berdasarkan jadwal per-tanggal (employee_schedules)
+                    </p>
+                )}
+                {(() => {
+                    // Group employees by their today's shift (per-date schedule > fallback static)
+                    const shiftGroups: Record<string, { nama: string; foto: string }[]> = {};
+                    employees.forEach(emp => {
+                        const empShift = todayScheduleMap[emp.id] || emp.shift || 'Tidak Diatur';
+                        if (!shiftGroups[empShift]) shiftGroups[empShift] = [];
+                        shiftGroups[empShift].push({ nama: emp.nama, foto: emp.foto });
+                    });
+
+                    // Sort: Libur last, rest alphabetical
+                    const sortedGroups = Object.entries(shiftGroups).sort(([a], [b]) => {
+                        if (a === 'Libur') return 1;
+                        if (b === 'Libur') return -1;
+                        return a.localeCompare(b);
+                    });
+
+                    if (sortedGroups.length === 0) {
+                        return <p className="text-sm text-gray-500">Tidak ada data karyawan.</p>;
+                    }
+
+                    return (
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                            {sortedGroups.map(([shiftName, empList]) => {
+                                const def = unitShifts.find(s => s.name === shiftName);
+                                const isOff = shiftName === 'Libur';
+                                const colorMap: Record<string, string> = {
+                                    yellow: 'border-yellow-300 bg-yellow-50', blue: 'border-blue-300 bg-blue-50',
+                                    indigo: 'border-indigo-300 bg-indigo-50', green: 'border-green-300 bg-green-50',
+                                    red: 'border-red-300 bg-red-50', purple: 'border-purple-300 bg-purple-50',
+                                    orange: 'border-orange-300 bg-orange-50', pink: 'border-pink-300 bg-pink-50',
+                                    teal: 'border-teal-300 bg-teal-50', gray: 'border-gray-300 bg-gray-50',
+                                };
+                                const borderBg = isOff
+                                    ? 'border-gray-200 bg-gray-50/50'
+                                    : (colorMap[def?.color || 'gray'] || colorMap['gray']);
+                                return (
+                                    <div key={shiftName} className={`rounded-lg border-l-4 p-3 ${borderBg}`}>
+                                        <div className="flex items-center justify-between mb-2">
+                                            <span className={`font-semibold text-sm ${isOff ? 'text-gray-400' : 'text-gray-800'}`}>
+                                                {isOff ? '💤 Libur' : shiftName}
+                                            </span>
+                                            <span className="text-xs bg-white/80 rounded-full px-2 py-0.5 text-gray-600 font-medium">
+                                                {empList.length} orang
+                                            </span>
+                                        </div>
+                                        {!isOff && def && (
+                                            <p className="text-[10px] text-gray-500 mb-2">
+                                                {def.type === 'rotating'
+                                                    ? `⏰ ${def.startTime} – ${def.endTime}`
+                                                    : '📅 Jadwal per hari'}
+                                            </p>
+                                        )}
+                                        <div className="space-y-1">
+                                            {empList.slice(0, 8).map((e, i) => (
+                                                <div key={i} className="flex items-center gap-1.5">
+                                                    <img
+                                                        src={e.foto || 'https://via.placeholder.com/16'}
+                                                        alt=""
+                                                        className="w-4 h-4 rounded-full object-cover"
+                                                    />
+                                                    <span className={`text-xs truncate ${isOff ? 'text-gray-400' : 'text-gray-700'}`}>{e.nama}</span>
+                                                </div>
+                                            ))}
+                                            {empList.length > 8 && (
+                                                <p className="text-[10px] text-gray-400 pl-5">+{empList.length - 8} lainnya</p>
+                                            )}
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    );
+                })()}
             </div>
 
             {/* Quick Actions for Unit Management */}
@@ -377,7 +668,7 @@ const KepalaRuanganDashboard: React.FC<KepalaRuanganDashboardProps> = ({ kepalaR
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     <QuickActionCard
                         title="Kelola Jadwal Shift"
-                        description="Atur jadwal kerja karyawan di unit Anda"
+                        description="Buat pola rotasi, generate jadwal bulanan, dan atur shift per karyawan"
                         icon={<CalendarDaysIcon className="h-6 w-6" />}
                         onClick={() => onNavigate?.('unit-schedule')}
                         color="text-blue-600"
@@ -393,7 +684,7 @@ const KepalaRuanganDashboard: React.FC<KepalaRuanganDashboardProps> = ({ kepalaR
                         title="Lihat Daftar Karyawan"
                         description="Kelola data karyawan di unit Anda"
                         icon={<UserGroupIcon className="h-6 w-6" />}
-                        onClick={() => onNavigate?.('dashboard')}
+                        onClick={() => onNavigate?.('employees')}
                         color="text-purple-600"
                     />
                 </div>

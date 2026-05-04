@@ -56,16 +56,16 @@ const WorkUnitManagement: React.FC<WorkUnitManagementProps> = ({ workUnits, onSa
                                 id="unitName"
                                 value={unitName}
                                 onChange={(e) => setUnitName(e.target.value)}
-                                className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary"
+                                className="mt-1 block w-full border-gray-300 rounded-lg shadow-sm focus:ring-primary focus:border-primary"
                                 placeholder="Contoh: Poli Anak"
                                 required
                             />
                         </div>
                         <div className="flex justify-end gap-2">
                             {editingUnit && (
-                                <button type="button" onClick={handleCancel} className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-100">Batal</button>
+                                <button type="button" onClick={handleCancel} className="px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-100">Batal</button>
                             )}
-                            <button type="submit" className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary hover:bg-opacity-90">
+                            <button type="submit" className="px-4 py-2 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-primary hover:bg-opacity-90">
                                 {editingUnit ? 'Simpan Perubahan' : 'Tambah Unit'}
                             </button>
                         </div>

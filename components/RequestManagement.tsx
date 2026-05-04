@@ -44,7 +44,7 @@ const RequestManagement: React.FC<RequestManagementProps> = ({ allRequests, empl
                 <select 
                     value={statusFilter} 
                     onChange={e => setStatusFilter(e.target.value as RequestStatus | 'Semua')}
-                    className="border-gray-300 rounded-md shadow-sm"
+                    className="border-gray-300 rounded-lg shadow-sm"
                 >
                     <option value="Semua">Semua Status</option>
                     {Object.values(RequestStatus).map(s => <option key={s} value={s}>{s}</option>)}
@@ -52,7 +52,7 @@ const RequestManagement: React.FC<RequestManagementProps> = ({ allRequests, empl
                  <select 
                     value={typeFilter} 
                     onChange={e => setTypeFilter(e.target.value as RequestType | 'Semua')}
-                    className="border-gray-300 rounded-md shadow-sm"
+                    className="border-gray-300 rounded-lg shadow-sm"
                 >
                     <option value="Semua">Semua Tipe</option>
                     {Object.values(RequestType).map(t => <option key={t} value={t}>{t}</option>)}

@@ -113,7 +113,7 @@ const ResetPassword: React.FC = () => {
                         <p className="mt-3 text-sm text-gray-600">Memverifikasi link...</p>
                     </div>
                 ) : !isValidSession ? (
-                    <div className="p-4 bg-red-100 border border-red-400 text-red-700 rounded-md text-sm text-center">
+                    <div className="p-4 bg-red-100 border border-red-400 text-red-700 rounded-lg text-sm text-center">
                         {error}
                         <div className="mt-3">
                             <a href="/" className="text-[#06736a] hover:underline">
@@ -131,7 +131,7 @@ const ResetPassword: React.FC = () => {
                                 type="password"
                                 value={newPassword}
                                 onChange={(e) => setNewPassword(e.target.value)}
-                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#06736a]"
+                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#06736a]"
                                 placeholder="Minimal 6 karakter"
                                 required
                                 disabled={loading}
@@ -146,7 +146,7 @@ const ResetPassword: React.FC = () => {
                                 type="password"
                                 value={confirmPassword}
                                 onChange={(e) => setConfirmPassword(e.target.value)}
-                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#06736a]"
+                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#06736a]"
                                 placeholder="Ulangi password baru"
                                 required
                                 disabled={loading}
@@ -154,20 +154,20 @@ const ResetPassword: React.FC = () => {
                         </div>
 
                         {message && (
-                            <div className="mb-4 p-3 bg-green-100 border border-green-400 text-green-700 rounded-md text-sm">
+                            <div className="mb-4 p-3 bg-green-100 border border-green-400 text-green-700 rounded-lg text-sm">
                                 {message}
                             </div>
                         )}
 
                         {error && (
-                            <div className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded-md text-sm">
+                            <div className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded-lg text-sm">
                                 {error}
                             </div>
                         )}
 
                         <button
                             type="submit"
-                            className="w-full px-4 py-2 bg-[#06736a] text-white rounded-md hover:bg-[#054f46] transition-colors disabled:bg-gray-400 font-medium"
+                            className="w-full px-4 py-2 bg-[#06736a] text-white rounded-lg hover:bg-[#054f46] transition-colors disabled:bg-gray-400 font-medium"
                             disabled={loading}
                         >
                             {loading ? 'Menyimpan...' : 'Reset Password'}

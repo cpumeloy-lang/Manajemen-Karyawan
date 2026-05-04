@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { SystemSettings as SystemSettingsType } from '../types';
+import { SystemSettings as SystemSettingsType, ShiftDefinition, DEFAULT_SHIFT_DEFINITIONS } from '../types';
 import { PencilIcon, CheckIcon, XMarkIcon } from './icons';
 import LoadingSpinner from './LoadingSpinner';
+import ShiftConfigPanel from './ShiftConfigPanel';
 
 interface SystemSettingsProps {
     settings: SystemSettingsType | null;
@@ -18,6 +19,14 @@ const SystemSettings: React.FC<SystemSettingsProps> = ({ settings, onUpdate, loa
         phone: ''
     });
     const [saving, setSaving] = useState(false);
+    const [shiftDefs, setShiftDefs] = useState<ShiftDefinition[]>(DEFAULT_SHIFT_DEFINITIONS);
+    const [shiftSaving, setShiftSaving] = useState(false);
+    const [payrollForm, setPayrollForm] = useState({
+        overtime_rate_per_hour: 30000,
+        bpjs_kesehatan_rate: 1, // dalam persen, akan dikonversi ke decimal saat simpan
+        bpjs_kesehatan_max_wage: 12000000,
+    });
+    const [payrollSaving, setPayrollSaving] = useState(false);
 
     useEffect(() => {
         if (settings) {
@@ -27,8 +36,40 @@ const SystemSettings: React.FC<SystemSettingsProps> = ({ settings, onUpdate, loa
                 address: settings.address || '',
                 phone: settings.phone || ''
             });
+            setShiftDefs(
+                (settings.default_shifts && settings.default_shifts.length > 0)
+                    ? settings.default_shifts
+                    : DEFAULT_SHIFT_DEFINITIONS
+            );
+            setPayrollForm({
+                overtime_rate_per_hour:  settings.overtime_rate_per_hour  ?? 30000,
+                bpjs_kesehatan_rate:    (settings.bpjs_kesehatan_rate    ?? 0.01) * 100, // ke persen
+                bpjs_kesehatan_max_wage: settings.bpjs_kesehatan_max_wage ?? 12000000,
+            });
         }
     }, [settings]);
+
+    const handleSavePayroll = async () => {
+        setPayrollSaving(true);
+        try {
+            await onUpdate({
+                overtime_rate_per_hour: payrollForm.overtime_rate_per_hour,
+                bpjs_kesehatan_rate:    payrollForm.bpjs_kesehatan_rate / 100, // dari persen ke decimal
+                bpjs_kesehatan_max_wage: payrollForm.bpjs_kesehatan_max_wage,
+            } as any);
+        } finally {
+            setPayrollSaving(false);
+        }
+    };
+
+    const handleSaveShifts = async () => {
+        setShiftSaving(true);
+        try {
+            await onUpdate({ default_shifts: shiftDefs } as any);
+        } finally {
+            setShiftSaving(false);
+        }
+    };
 
     const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
         const { name, value } = e.target;
@@ -68,6 +109,7 @@ const SystemSettings: React.FC<SystemSettingsProps> = ({ settings, onUpdate, loa
     }
 
     return (
+        <>
         <div className="bg-white shadow-md rounded-lg p-6">
             <div className="flex justify-between items-center mb-6">
                 <h2 className="text-2xl font-bold text-gray-800">Pengaturan Sistem</h2>
@@ -199,6 +241,108 @@ const SystemSettings: React.FC<SystemSettingsProps> = ({ settings, onUpdate, loa
                 </form>
             )}
         </div>
+
+        {/* Konfigurasi Shift Global */}
+
+        <div className="bg-white shadow-md rounded-lg p-6 mt-6">
+            <div className="flex items-center justify-between mb-2">
+                <div>
+                    <h2 className="text-xl font-bold text-gray-800">⏰ Konfigurasi Shift Global</h2>
+                    <p className="text-sm text-gray-500 mt-0.5">
+                        Shift default sistem. Kepala Unit dapat override per unit di modul Jadwal Unit.
+                    </p>
+                </div>
+                <button
+                    type="button"
+                    onClick={handleSaveShifts}
+                    disabled={shiftSaving}
+                    className="flex items-center gap-2 px-4 py-2 bg-[#06736a] text-white rounded-lg hover:bg-[#054f46] transition-colors disabled:bg-gray-400 text-sm font-medium"
+                >
+                    {shiftSaving ? (
+                        <svg className="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                        </svg>
+                    ) : <CheckIcon />}
+                    <span>{shiftSaving ? 'Menyimpan...' : 'Simpan Konfigurasi Shift'}</span>
+                </button>
+            </div>
+
+            <div className="mt-1 mb-4 rounded-lg bg-blue-50 border border-blue-200 px-4 py-3 text-xs text-blue-700">
+                <strong>Hierarki prioritas shift:</strong>{' '}
+                <span className="font-semibold">Jadwal per tanggal (KR)</span> →{' '}
+                <span className="font-semibold">Penugasan unit (KR)</span> →{' '}
+                <span className="font-semibold">Shift global ini</span> →{' '}
+                <span>Tipe kontrak karyawan</span>
+            </div>
+
+            <ShiftConfigPanel shifts={shiftDefs} onChange={setShiftDefs} />
+        </div>
+
+        {/* ── Payroll Configuration Panel ── */}
+        <div className="mt-6 bg-white rounded-lg shadow-md p-6 border border-gray-200">
+            <div className="flex items-center justify-between mb-4">
+                <div>
+                    <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2">
+                        💰 Konfigurasi Penggajian
+                    </h2>
+                    <p className="text-xs text-gray-500 mt-0.5">
+                        Tarif lembur dan BPJS yang dipakai pada perhitungan slip gaji.
+                    </p>
+                </div>
+                <button
+                    type="button"
+                    onClick={handleSavePayroll}
+                    disabled={payrollSaving}
+                    className="flex items-center gap-2 px-4 py-2 bg-[#06736a] text-white rounded-lg hover:bg-[#054f46] transition-colors disabled:bg-gray-400 text-sm font-medium"
+                >
+                    {payrollSaving ? (
+                        <svg className="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                        </svg>
+                    ) : <CheckIcon />}
+                    <span>{payrollSaving ? 'Menyimpan...' : 'Simpan Konfigurasi Gaji'}</span>
+                </button>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Tarif Lembur per Jam (Rp)</label>
+                    <input
+                        type="number" min={0} step={1000}
+                        value={payrollForm.overtime_rate_per_hour}
+                        onChange={e => setPayrollForm(p => ({ ...p, overtime_rate_per_hour: Number(e.target.value) }))}
+                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#06736a]"
+                    />
+                    <p className="text-[10px] text-gray-500 mt-1">Default: Rp 30.000/jam</p>
+                </div>
+                <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Tarif BPJS Kesehatan (%)</label>
+                    <input
+                        type="number" min={0} max={10} step={0.1}
+                        value={payrollForm.bpjs_kesehatan_rate}
+                        onChange={e => setPayrollForm(p => ({ ...p, bpjs_kesehatan_rate: Number(e.target.value) }))}
+                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#06736a]"
+                    />
+                    <p className="text-[10px] text-gray-500 mt-1">Default: 1% (dipotong dari gaji)</p>
+                </div>
+                <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Batas Atas Upah BPJS (Rp)</label>
+                    <input
+                        type="number" min={0} step={100000}
+                        value={payrollForm.bpjs_kesehatan_max_wage}
+                        onChange={e => setPayrollForm(p => ({ ...p, bpjs_kesehatan_max_wage: Number(e.target.value) }))}
+                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#06736a]"
+                    />
+                    <p className="text-[10px] text-gray-500 mt-1">Default: Rp 12.000.000 (regulasi BPJS)</p>
+                </div>
+            </div>
+            <div className="mt-4 rounded-lg bg-amber-50 border border-amber-200 px-4 py-3 text-xs text-amber-800">
+                ⚠️ Perubahan tarif berlaku untuk slip gaji yang <strong>baru di-generate</strong> setelah simpan. Slip lama tidak dihitung ulang otomatis.
+            </div>
+        </div>
+        </>
     );
 };
 

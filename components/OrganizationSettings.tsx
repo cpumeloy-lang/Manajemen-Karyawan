@@ -177,7 +177,7 @@ const OrganizationSettings: React.FC<OrganizationSettingsProps> = ({
                                         id="deptName"
                                         value={deptName}
                                         onChange={(e) => setDeptName(e.target.value)}
-                                        className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-[#06736a] focus:border-[#06736a]"
+                                        className="mt-1 block w-full border-gray-300 rounded-lg shadow-sm focus:ring-[#06736a] focus:border-[#06736a]"
                                         placeholder="Contoh: Departemen Medis"
                                         required
                                     />
@@ -187,14 +187,14 @@ const OrganizationSettings: React.FC<OrganizationSettingsProps> = ({
                                         <button
                                             type="button"
                                             onClick={handleCancelDept}
-                                            className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-100"
+                                            className="px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-100"
                                         >
                                             Batal
                                         </button>
                                     )}
                                     <button
                                         type="submit"
-                                        className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-[#06736a] hover:bg-[#054f46]"
+                                        className="px-4 py-2 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-[#06736a] hover:bg-[#054f46]"
                                     >
                                         {editingDept ? 'Simpan Perubahan' : 'Tambah Departemen'}
                                     </button>
@@ -276,7 +276,7 @@ const OrganizationSettings: React.FC<OrganizationSettingsProps> = ({
                                         id="posName"
                                         value={posName}
                                         onChange={(e) => setPosName(e.target.value)}
-                                        className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-[#06736a] focus:border-[#06736a]"
+                                        className="mt-1 block w-full border-gray-300 rounded-lg shadow-sm focus:ring-[#06736a] focus:border-[#06736a]"
                                         placeholder="Contoh: Dokter Spesialis"
                                         required
                                     />
@@ -286,14 +286,14 @@ const OrganizationSettings: React.FC<OrganizationSettingsProps> = ({
                                         <button
                                             type="button"
                                             onClick={handleCancelPos}
-                                            className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-100"
+                                            className="px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-100"
                                         >
                                             Batal
                                         </button>
                                     )}
                                     <button
                                         type="submit"
-                                        className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-[#06736a] hover:bg-[#054f46]"
+                                        className="px-4 py-2 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-[#06736a] hover:bg-[#054f46]"
                                     >
                                         {editingPos ? 'Simpan Perubahan' : 'Tambah Jabatan'}
                                     </button>
@@ -375,7 +375,7 @@ const OrganizationSettings: React.FC<OrganizationSettingsProps> = ({
                                         id="unitName"
                                         value={unitName}
                                         onChange={(e) => setUnitName(e.target.value)}
-                                        className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-[#06736a] focus:border-[#06736a]"
+                                        className="mt-1 block w-full border-gray-300 rounded-lg shadow-sm focus:ring-[#06736a] focus:border-[#06736a]"
                                         placeholder="Contoh: Poli Anak"
                                         required
                                     />
@@ -385,14 +385,14 @@ const OrganizationSettings: React.FC<OrganizationSettingsProps> = ({
                                         <button
                                             type="button"
                                             onClick={handleCancelUnit}
-                                            className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-100"
+                                            className="px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-100"
                                         >
                                             Batal
                                         </button>
                                     )}
                                     <button
                                         type="submit"
-                                        className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-[#06736a] hover:bg-[#054f46]"
+                                        className="px-4 py-2 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-[#06736a] hover:bg-[#054f46]"
                                     >
                                         {editingUnit ? 'Simpan Perubahan' : 'Tambah Unit'}
                                     </button>
