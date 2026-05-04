@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Payslip, Employee } from '../types.ts';
 import { XMarkIcon, PrinterIcon } from './icons.tsx';
 
@@ -10,7 +10,19 @@ interface PayslipDetailProps {
 }
 
 const PayslipDetail: React.FC<PayslipDetailProps> = ({ isOpen, onClose, payslip, employee }) => {
-    if (!isOpen || !payslip || !employee) return null;
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key === 'Escape' && isOpen) onClose();
+        };
+        document.addEventListener('keydown', handleKeyDown);
+        if (isOpen) document.body.style.overflow = 'hidden';
+        return () => {
+            document.removeEventListener('keydown', handleKeyDown);
+            document.body.style.overflow = '';
+        };
+    }, [isOpen, onClose]);
+
+    if (!payslip || !employee) return null;
     
     const handlePrint = () => {
         const printContent = document.getElementById('payslip-print-area');
@@ -48,20 +60,44 @@ const PayslipDetail: React.FC<PayslipDetailProps> = ({ isOpen, onClose, payslip,
     );
 
     return (
-        <div className="fixed inset-0 bg-black bg-opacity-60 flex justify-center items-center p-4 z-50">
-            <div className="bg-white rounded-lg shadow-xl w-full max-w-lg max-h-[90vh] flex flex-col">
-                <div className="p-5 border-b flex justify-between items-center no-print">
-                    <h2 className="text-xl font-bold text-primary">Detail Slip Gaji</h2>
+        <div
+            className={`fixed inset-0 z-50 transition-opacity duration-300 ${isOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}
+            aria-modal="true"
+            role="dialog"
+        >
+            {/* Backdrop */}
+            <div className="absolute inset-0 bg-black/50" onClick={onClose} />
+
+            {/* Drawer */}
+            <div className={`absolute inset-y-0 right-0 flex w-full max-w-lg flex-col bg-white shadow-2xl transition-transform duration-300 ease-in-out rounded-l-2xl overflow-hidden ${
+                isOpen ? 'translate-x-0' : 'translate-x-full'
+            }`}>
+                {/* Header */}
+                <div className="flex-shrink-0 p-5 border-b bg-white flex justify-between items-center no-print">
                     <div>
-                         <button onClick={handlePrint} className="text-gray-500 hover:text-primary mr-4">
-                            <PrinterIcon className="h-6 w-6" />
+                        <h2 className="text-lg font-bold text-primary">Detail Slip Gaji</h2>
+                        <p className="text-xs text-gray-500 mt-0.5">{payslip.periode}</p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <button
+                            onClick={handlePrint}
+                            title="Cetak slip gaji"
+                            className="rounded-full p-2 text-gray-500 hover:bg-gray-100 hover:text-primary transition-colors"
+                        >
+                            <PrinterIcon className="h-5 w-5" />
                         </button>
-                        <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
-                            <XMarkIcon className="h-6 w-6" />
+                        <button
+                            onClick={onClose}
+                            title="Tutup"
+                            className="rounded-full p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors"
+                        >
+                            <XMarkIcon className="h-5 w-5" />
                         </button>
                     </div>
                 </div>
-                <div className="flex-grow overflow-y-auto p-6" id="payslip-print-area">
+
+                {/* Scrollable content */}
+                <div className="flex-1 overflow-y-auto p-6" id="payslip-print-area">
                     <div className="text-center mb-6">
                         <h3 className="text-2xl font-bold text-gray-800">SLIP GAJI</h3>
                         <p className="text-gray-600">Periode: {payslip.periode}</p>

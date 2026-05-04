@@ -188,6 +188,33 @@ class DataService {
   }
 
   /**
+   * Get employees by unit ID (for Kepala Ruangan)
+   */
+  async getEmployeesByUnit(unitId: string): Promise<DataResponse> {
+    try {
+      const { data, error } = await dataSupabase
+        .from('employees')
+        .select('*')
+        .eq('unitKerjaId', unitId)
+        .order('nama', { ascending: true });
+
+      if (error) {
+        const fallback = await (dataSupabase as any)
+          .from('employees')
+          .select('*')
+          .eq('unit_kerja_id', unitId)
+          .order('nama', { ascending: true });
+        if (fallback.error) return { success: false, error: fallback.error.message };
+        return { success: true, data: fallback.data };
+      }
+
+      return { success: true, data };
+    } catch (error: any) {
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
    * Get attendance records
    */
   async getAttendance(filters?: Record<string, any>): Promise<DataResponse> {
@@ -286,7 +313,7 @@ class DataService {
    */
   async insert(table: string, data: any): Promise<DataResponse> {
     try {
-      const { data: result, error } = await dataSupabase
+      const { data: result, error } = await (dataSupabase as any)
         .from(table)
         .insert(data)
         .select();
@@ -306,7 +333,7 @@ class DataService {
    */
   async update(table: string, id: string, data: any): Promise<DataResponse> {
     try {
-      const { data: result, error } = await dataSupabase
+      const { data: result, error } = await (dataSupabase as any)
         .from(table)
         .update(data)
         .eq('id', id)
@@ -327,7 +354,7 @@ class DataService {
    */
   async delete(table: string, id: string): Promise<DataResponse> {
     try {
-      const { error } = await dataSupabase
+      const { error } = await (dataSupabase as any)
         .from(table)
         .delete()
         .eq('id', id);
@@ -347,7 +374,7 @@ class DataService {
    */
   async query(table: string, queryBuilder?: (q: any) => any): Promise<DataResponse> {
     try {
-      let query = dataSupabase.from(table).select('*');
+      let query = (dataSupabase as any).from(table).select('*');
 
       if (queryBuilder) {
         query = queryBuilder(query);

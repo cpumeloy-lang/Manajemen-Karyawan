@@ -84,6 +84,14 @@ export const useEmployeeImport = () => {
     }
   }, [showError]);
 
+  const fetchUnits = useCallback(async (): Promise<Map<string, string>> => {
+    const { data, error } = await supabase.from('units').select('id, nama');
+    if (error || !data) return new Map();
+    const map = new Map<string, string>();
+    (data as any[]).forEach((u) => map.set(String(u.nama).toLowerCase().trim(), u.id));
+    return map;
+  }, []);
+
   const fetchExistingEmails = useCallback(async () => {
     const { data, error } = await supabase
       .from('employees')
@@ -133,8 +141,9 @@ export const useEmployeeImport = () => {
         let skippedCount = 0;
         let errorCount = 0;
         const errors: string[] = [];
-        const errorRows: ImportError[] = [];
+        const errorRows: ImportValidationError[] = [];
         const existingEmails = await fetchExistingEmails();
+        const unitNameMap = await fetchUnits();
 
         for (let i = 0; i < importedData.length; i++) {
           try {
@@ -152,6 +161,9 @@ export const useEmployeeImport = () => {
             const npwp = toSafeString(getField(row, 'NPWP', 'npwp'));
             const bpjsKesehatan = toSafeString(getField(row, 'BPJS_Kesehatan', 'BPJS Kesehatan', 'bpjsKesehatan'));
             const bpjsKetenagakerjaan = toSafeString(getField(row, 'BPJS_Ketenagakerjaan', 'BPJS Ketenagakerjaan', 'bpjsKetenagakerjaan'));
+            const agama = toSafeString(getField(row, 'Agama', 'agama')) || undefined;
+            const unitKerjaName = toSafeString(getField(row, 'Unit_Kerja', 'Unit Kerja', 'unitKerjaId', 'unitkerja'));
+            const unitKerjaId = unitNameMap.get(unitKerjaName.toLowerCase().trim()) || unitKerjaName || null;
             const maritalStatus = normalizeMaritalStatus(getField(row, 'Status_Nikah', 'Status Nikah', 'maritalStatus'));
             const dependents = Number(getField(row, 'Jumlah_Tanggungan', 'Jumlah Tanggungan', 'dependents')) || 0;
             const addressKtp = toSafeString(getField(row, 'Alamat_KTP', 'Alamat KTP'));
@@ -209,6 +221,8 @@ export const useEmployeeImport = () => {
               npwp: npwp || null,
               bpjsKesehatan: bpjsKesehatan || null,
               bpjsKetenagakerjaan: bpjsKetenagakerjaan || null,
+              agama: agama || null,
+              unitKerjaId: unitKerjaId || null,
               maritalStatus,
               dependents,
               address: addressKtp || addressDomisili || province || city || postalCode ? {

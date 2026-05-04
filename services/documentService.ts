@@ -304,5 +304,5 @@ export const getExpiringDocuments = async (daysBeforeExpiry: number = 30): Promi
         return [];
     }
 
-    return data || [];
+    return (data || []) as unknown as DocumentMetadata[];
 };

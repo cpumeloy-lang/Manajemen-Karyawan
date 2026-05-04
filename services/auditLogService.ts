@@ -1,5 +1,30 @@
 import { supabase } from './supabaseClient';
 
+const AUDIT_LOG_UNAVAILABLE_CACHE_KEY = 'hrms.audit_logs_unavailable';
+
+const setAuditLogUnavailableCache = (isUnavailable: boolean): void => {
+    try {
+        if (isUnavailable) {
+            localStorage.setItem(AUDIT_LOG_UNAVAILABLE_CACHE_KEY, '1');
+        } else {
+            localStorage.removeItem(AUDIT_LOG_UNAVAILABLE_CACHE_KEY);
+        }
+    } catch {
+        // Ignore storage access errors.
+    }
+};
+
+const isAuditLogsTableMissingError = (error: any): boolean => {
+    const code = String(error?.code || '').toUpperCase();
+    const message = String(error?.message || '').toLowerCase();
+
+    return (
+        code === 'PGRST205' ||
+        (message.includes('could not find the table') && message.includes('audit_logs')) ||
+        (message.includes('audit_logs') && (message.includes('does not exist') || message.includes('not found')))
+    );
+};
+
 interface CreateAuditLogParams {
     action: 'CREATE' | 'UPDATE' | 'DELETE';
     entityType: 'employee' | 'attendance' | 'request' | 'payroll' | 'unit' | 'department' | 'position' | 'custom';
@@ -8,7 +33,14 @@ interface CreateAuditLogParams {
     oldData?: any;
     newData?: any;
     description: string;
+    metadata?: Record<string, any>;
+    portalType?: 'personal' | 'operational';
 }
+
+const isPortalTypeColumnError = (error: any): boolean => {
+    const message = String(error?.message || '').toLowerCase();
+    return message.includes('portal_type') && (message.includes('column') || message.includes('does not exist'));
+};
 
 /**
  * Manual Audit Log Creation
@@ -48,7 +80,7 @@ export const createAuditLog = async (params: CreateAuditLogParams) => {
         }
 
         // Calculate changes if both old and new data provided
-        let changes = null;
+        let changes: any = null;
         if (params.oldData && params.newData && params.action === 'UPDATE') {
             const changedFields: any = {};
             
@@ -66,34 +98,69 @@ export const createAuditLog = async (params: CreateAuditLogParams) => {
             }
         }
 
-        // Insert audit log
-        const { data, error } = await supabase
+        if (params.metadata || params.portalType) {
+            changes = {
+                ...(changes || {}),
+                metadata: {
+                    ...(params.metadata || {}),
+                    ...(params.portalType ? { portal_type: params.portalType } : {}),
+                },
+            };
+        }
+
+        const insertPayload: any = {
+            user_id: user.id,
+            user_email: user.email || 'unknown',
+            user_name: profile.nama,
+            action: params.action,
+            entity_type: params.entityType,
+            entity_id: params.entityId || null,
+            entity_name: params.entityName || null,
+            old_data: params.oldData || null,
+            new_data: params.newData || null,
+            changes: changes,
+            description: params.description,
+            portal_type: params.portalType || 'unknown',
+        };
+
+        let { data, error } = await supabase
             .from('audit_logs')
-            .insert({
-                user_id: user.id,
-                user_email: user.email || 'unknown',
-                user_name: profile.nama,
-                action: params.action,
-                entity_type: params.entityType,
-                entity_id: params.entityId || null,
-                entity_name: params.entityName || null,
-                old_data: params.oldData || null,
-                new_data: params.newData || null,
-                changes: changes,
-                description: params.description
-            })
+            .insert(insertPayload)
             .select()
             .single();
 
+        // Backward compatibility for old schema that does not have portal_type column yet.
+        if (error && isPortalTypeColumnError(error)) {
+            delete insertPayload.portal_type;
+            const fallbackResult = await supabase
+                .from('audit_logs')
+                .insert(insertPayload)
+                .select()
+                .single();
+            data = fallbackResult.data;
+            error = fallbackResult.error;
+        }
+
         if (error) {
+            if (isAuditLogsTableMissingError(error)) {
+                setAuditLogUnavailableCache(true);
+                return null;
+            }
+
             console.error('Error creating audit log:', error);
             return null;
         }
 
+        setAuditLogUnavailableCache(false);
         console.log('✅ Audit log created:', data.id);
         return data;
 
     } catch (error) {
+        if (isAuditLogsTableMissingError(error)) {
+            setAuditLogUnavailableCache(true);
+            return null;
+        }
+
         console.error('Error in createAuditLog:', error);
         return null;
     }
@@ -120,6 +187,7 @@ export const getAuditLogs = async (filters?: {
     entityType?: string;
     entityId?: string;
     userEmail?: string;
+    portalType?: 'personal' | 'operational';
     dateFrom?: string;
     dateTo?: string;
     limit?: number;
@@ -142,6 +210,9 @@ export const getAuditLogs = async (filters?: {
         if (filters?.userEmail) {
             query = query.eq('user_email', filters.userEmail);
         }
+        if (filters?.portalType) {
+            query = query.eq('portal_type', filters.portalType);
+        }
         if (filters?.dateFrom) {
             query = query.gte('created_at', filters.dateFrom);
         }
@@ -154,16 +225,64 @@ export const getAuditLogs = async (filters?: {
             query = query.limit(100);
         }
 
-        const { data, error } = await query;
+        let { data, error } = await query;
+
+        // Backward compatibility for old schema that does not have portal_type column yet.
+        if (error && filters?.portalType && isPortalTypeColumnError(error)) {
+            let fallbackQuery = supabase
+                .from('audit_logs')
+                .select('*')
+                .order('created_at', { ascending: false })
+                .contains('changes', { metadata: { portal_type: filters.portalType } });
+
+            if (filters?.action) {
+                fallbackQuery = fallbackQuery.eq('action', filters.action);
+            }
+            if (filters?.entityType) {
+                fallbackQuery = fallbackQuery.eq('entity_type', filters.entityType);
+            }
+            if (filters?.entityId) {
+                fallbackQuery = fallbackQuery.eq('entity_id', filters.entityId);
+            }
+            if (filters?.userEmail) {
+                fallbackQuery = fallbackQuery.eq('user_email', filters.userEmail);
+            }
+            if (filters?.dateFrom) {
+                fallbackQuery = fallbackQuery.gte('created_at', filters.dateFrom);
+            }
+            if (filters?.dateTo) {
+                fallbackQuery = fallbackQuery.lte('created_at', filters.dateTo);
+            }
+            if (filters?.limit) {
+                fallbackQuery = fallbackQuery.limit(filters.limit);
+            } else {
+                fallbackQuery = fallbackQuery.limit(100);
+            }
+
+            const fallbackResult = await fallbackQuery;
+            data = fallbackResult.data;
+            error = fallbackResult.error;
+        }
 
         if (error) {
+            if (isAuditLogsTableMissingError(error)) {
+                setAuditLogUnavailableCache(true);
+                return [];
+            }
+
             console.error('Error fetching audit logs:', error);
             return [];
         }
 
+        setAuditLogUnavailableCache(false);
         return data || [];
 
     } catch (error) {
+        if (isAuditLogsTableMissingError(error)) {
+            setAuditLogUnavailableCache(true);
+            return [];
+        }
+
         console.error('Error in getAuditLogs:', error);
         return [];
     }

@@ -12,7 +12,8 @@ import {
   Document,
   AuthenticatedUser,
   SortDirection,
-  SortKey
+  SortKey,
+  View,
 } from '../types';
 
 // ============================================================================
@@ -40,7 +41,8 @@ interface DataState {
 }
 
 interface UIState {
-  view: 'dashboard' | 'personal-dashboard' | 'employees' | 'organization' | 'system' | 'attendance' | 'payroll' | 'requests' | 'ess' | 'unit-schedule' | 'audit-log' | 'employee-attendance-detail';
+  activePortal: 'personal' | 'operational' | null;
+  view: View;
   essDefaultTab: 'overview' | 'attendance';
   isChangePasswordOpen: boolean;
   isAuditLogOpen: boolean;
@@ -52,11 +54,11 @@ interface UIState {
   searchTerm: string;
   sortKey: SortKey;
   sortDirection: SortDirection;
+  successMessage: string | null;
 }
 
 interface ErrorState {
   error: string | null;
-  isDatabaseError: boolean;
 }
 
 export interface AppStore extends AuthState, DataState, UIState, ErrorState {
@@ -88,6 +90,7 @@ export interface AppStore extends AuthState, DataState, UIState, ErrorState {
   updateRequest: (request: AllRequest) => void;
 
   // UI actions
+  setActivePortal: (portal: UIState['activePortal']) => void;
   setView: (view: UIState['view']) => void;
   setEssDefaultTab: (tab: 'overview' | 'attendance') => void;
   setIsChangePasswordOpen: (open: boolean) => void;
@@ -100,6 +103,7 @@ export interface AppStore extends AuthState, DataState, UIState, ErrorState {
   setSearchTerm: (term: string) => void;
   setSortKey: (key: SortKey) => void;
   setSortDirection: (direction: SortDirection) => void;
+  setSuccessMessage: (message: string | null) => void;
 
   // Error actions
   setError: (error: string | null) => void;
@@ -135,6 +139,7 @@ const initialDataState: DataState = {
 };
 
 const initialUIState: UIState = {
+  activePortal: null,
   view: 'dashboard',
   essDefaultTab: 'overview',
   isChangePasswordOpen: false,
@@ -147,11 +152,11 @@ const initialUIState: UIState = {
   searchTerm: '',
   sortKey: 'nama',
   sortDirection: 'asc',
+  successMessage: null,
 };
 
 const initialErrorState: ErrorState = {
   error: null,
-  isDatabaseError: false,
 };
 
 // ============================================================================
@@ -182,6 +187,7 @@ export const useAppStore = create<AppStore>()(
             {
               authUser: null,
               isLoggingOut: false,
+              activePortal: null,
               view: 'dashboard',
             },
             false,
@@ -281,6 +287,8 @@ export const useAppStore = create<AppStore>()(
           ),
 
         // UI actions
+        setActivePortal: (activePortal) =>
+          set({ activePortal }, false, 'setActivePortal'),
         setView: (view) =>
           set({ view }, false, 'setView'),
         setEssDefaultTab: (essDefaultTab) =>
@@ -305,6 +313,8 @@ export const useAppStore = create<AppStore>()(
           set({ sortKey }, false, 'setSortKey'),
         setSortDirection: (sortDirection) =>
           set({ sortDirection }, false, 'setSortDirection'),
+        setSuccessMessage: (successMessage) =>
+          set({ successMessage }, false, 'setSuccessMessage'),
 
         // Error actions
         setError: (error) =>
@@ -330,6 +340,7 @@ export const useAppStore = create<AppStore>()(
         name: 'hrms-app-store',
         partialize: (state) => ({
           // Only persist UI state, not auth/data
+          activePortal: state.activePortal,
           view: state.view,
           essDefaultTab: state.essDefaultTab,
           searchTerm: state.searchTerm,
@@ -404,6 +415,7 @@ export const useAppDataActions = () =>
 export const useUI = () =>
   useAppStore(
     useShallow((state) => ({
+      activePortal: state.activePortal,
       view: state.view,
       essDefaultTab: state.essDefaultTab,
       isChangePasswordOpen: state.isChangePasswordOpen,
@@ -416,12 +428,14 @@ export const useUI = () =>
       searchTerm: state.searchTerm,
       sortKey: state.sortKey,
       sortDirection: state.sortDirection,
+      successMessage: state.successMessage,
     }))
   );
 
 export const useUIActions = () =>
   useAppStore(
     useShallow((state) => ({
+      setActivePortal: state.setActivePortal,
       setView: state.setView,
       setEssDefaultTab: state.setEssDefaultTab,
       setIsChangePasswordOpen: state.setIsChangePasswordOpen,
@@ -434,6 +448,7 @@ export const useUIActions = () =>
       setSearchTerm: state.setSearchTerm,
       setSortKey: state.setSortKey,
       setSortDirection: state.setSortDirection,
+      setSuccessMessage: state.setSuccessMessage,
     }))
   );
 

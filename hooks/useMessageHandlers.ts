@@ -1,9 +1,10 @@
-import { useCallback, useState } from 'react';
-import { useAppErrorActions } from '../stores/appStore';
+import { useCallback } from 'react';
+import { useAppErrorActions, useUIActions, useUI } from '../stores/appStore';
 
 export const useMessageHandlers = () => {
   const { setError: setAppError } = useAppErrorActions();
-  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const { setSuccessMessage } = useUIActions();
+  const { successMessage } = useUI();
 
   const showSuccess = useCallback((message: string, duration = 3500) => {
     setSuccessMessage(message);
@@ -12,7 +13,7 @@ export const useMessageHandlers = () => {
     }, duration);
 
     return () => window.clearTimeout(timeoutId);
-  }, []);
+  }, [setSuccessMessage]);
 
   const showError = useCallback(
     (label: string, err: unknown) => {
@@ -30,7 +31,7 @@ export const useMessageHandlers = () => {
 
   const clearSuccess = useCallback(() => {
     setSuccessMessage(null);
-  }, []);
+  }, [setSuccessMessage]);
 
   return {
     successMessage,

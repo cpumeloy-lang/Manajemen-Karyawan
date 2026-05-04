@@ -6,6 +6,7 @@
  */
 
 import { createClient } from '@supabase/supabase-js';
+import type { Database } from './database.types';
 
 let configuredAuthUrl = import.meta.env.VITE_AUTH_SUPABASE_URL?.trim();
 
@@ -32,12 +33,12 @@ if (!authSupabaseUrl || !authSupabaseKey) {
 
 const authClientKey = '__hrms_auth_supabase_client__';
 const globalAuthScope = globalThis as typeof globalThis & {
-  [authClientKey]?: ReturnType<typeof createClient>;
+  [authClientKey]?: ReturnType<typeof createClient<Database>>;
 };
 
 export const authSupabase =
   globalAuthScope[authClientKey] ||
-  createClient(authSupabaseUrl || '', authSupabaseKey || '', {
+  createClient<Database>(authSupabaseUrl || '', authSupabaseKey || '', {
   auth: {
     storageKey: 'hrms-auth-session',
     autoRefreshToken: true,

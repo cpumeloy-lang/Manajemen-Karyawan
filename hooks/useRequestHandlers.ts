@@ -1,11 +1,31 @@
 import { useCallback } from 'react';
 import { supabase } from '../services/supabaseClient';
 import { AllRequest, RequestType, RequestStatus, LeaveRequest, Employee } from '../types';
-import { useAppData, useAppDataActions } from '../stores/appStore';
+import { useAppData, useAppDataActions, useAuth, useUI } from '../stores/appStore';
 import { useMessageHandlers } from './useMessageHandlers';
+import { canManageOperationalRequests, ensurePortalAccess } from '../services/portalAccessService';
+import { createAuditLog } from '../services/auditLogService';
+
+const calculateWorkingDays = (startDate: string, endDate: string): number => {
+  const start = new Date(startDate);
+  const end = new Date(endDate);
+  let count = 0;
+  let current = new Date(start);
+
+  while (current <= end) {
+    const day = current.getDay();
+    if (day !== 0 && day !== 6) { // 0 = Sunday, 6 = Saturday
+      count++;
+    }
+    current.setDate(current.getDate() + 1);
+  }
+  return count;
+};
 
 export const useRequestHandlers = () => {
   const { employees } = useAppData();
+  const { authUser } = useAuth();
+  const { activePortal } = useUI();
   const { setAllRequests, setEmployees } = useAppDataActions();
   const { showSuccess, showError } = useMessageHandlers();
 
@@ -16,6 +36,17 @@ export const useRequestHandlers = () => {
       newStatus: RequestStatus
     ) => {
       try {
+        const portalError = ensurePortalAccess(activePortal, 'operational', 'Update status permohonan');
+        if (portalError) {
+          showError('Akses ditolak', portalError);
+          return;
+        }
+
+        if (!canManageOperationalRequests(authUser?.profile.role)) {
+          showError('Akses ditolak', 'Role Anda tidak memiliki izin untuk memproses permohonan.');
+          return;
+        }
+
         const { data: updatedRequest, error } = await supabase
           .from('requests')
           .update({ status: newStatus })
@@ -35,10 +66,7 @@ export const useRequestHandlers = () => {
           updatedRequest
         ) {
           const leaveReq = updatedRequest as LeaveRequest;
-          const diffTime = Math.abs(
-            new Date(leaveReq.endDate).getTime() - new Date(leaveReq.startDate).getTime()
-          );
-          const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
+          const diffDays = calculateWorkingDays(leaveReq.startDate, leaveReq.endDate);
           const employeeToUpdate = employees.find((emp) => emp.id === leaveReq.employeeId);
 
           if (employeeToUpdate) {
@@ -61,17 +89,40 @@ export const useRequestHandlers = () => {
         setAllRequests((prev) =>
           prev.map((req) => (req.id === requestId ? { ...req, status: newStatus } : req))
         );
+
+        await createAuditLog({
+          action: 'UPDATE',
+          entityType: 'request',
+          entityId: requestId,
+          entityName: type,
+          newData: { status: newStatus },
+          description: `Mengubah status permohonan ${type} menjadi ${newStatus}`,
+          portalType: 'operational',
+          metadata: { source: 'useRequestHandlers.handleUpdateRequestStatus' },
+        });
+
         showSuccess('Status permohonan berhasil diperbarui.');
       } catch (error: any) {
         showError('Gagal memperbarui status permohonan', error);
       }
     },
-    [setAllRequests, setEmployees, showSuccess, showError]
+    [activePortal, authUser, setAllRequests, setEmployees, showSuccess, showError]
   );
 
   const handleNewRequest = useCallback(
     async (request: Omit<AllRequest, 'id' | 'status' | 'requestedAt'>) => {
       try {
+        const portalError = ensurePortalAccess(activePortal, 'personal', 'Pengajuan permohonan');
+        if (portalError) {
+          showError('Akses ditolak', portalError);
+          return;
+        }
+
+        if (authUser && request.employeeId !== authUser.profile.id) {
+          showError('Akses ditolak', 'Anda hanya dapat mengajukan permohonan untuk akun sendiri.');
+          return;
+        }
+
         const newRequestPayload = {
           ...request,
           status: 'Pending',
@@ -91,13 +142,28 @@ export const useRequestHandlers = () => {
 
         if (data) {
           setAllRequests((prev) => [...prev, data as AllRequest]);
+
+          await createAuditLog({
+            action: 'CREATE',
+            entityType: 'request',
+            entityId: (data as any).id,
+            entityName: request.type,
+            newData: {
+              type: request.type,
+              employeeId: request.employeeId,
+            },
+            description: `Mengajukan permohonan ${request.type}`,
+            portalType: 'personal',
+            metadata: { source: 'useRequestHandlers.handleNewRequest' },
+          });
+
           showSuccess('Permohonan berhasil diajukan.');
         }
       } catch (error: any) {
         showError('Gagal mengajukan permohonan', error);
       }
     },
-    [setAllRequests, showSuccess, showError]
+    [activePortal, authUser, setAllRequests, showSuccess, showError]
   );
 
   return {

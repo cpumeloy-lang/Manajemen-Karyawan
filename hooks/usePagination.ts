@@ -44,12 +44,12 @@ export const usePagination = <T,>(
         const to = from + pageSize - 1;
 
         // Build query with optional filters
-        let query = supabase.from(table).select('*', { count: 'exact' });
+        let query = (supabase as any).from(table).select('*', { count: 'exact' });
 
         if (filters) {
           Object.entries(filters).forEach(([key, value]) => {
             if (value !== undefined && value !== null && value !== '') {
-              query = query.eq(key, value);
+              query = (query as any).eq(key, value);
             }
           });
         }
@@ -63,7 +63,7 @@ export const usePagination = <T,>(
         const total = count || 0;
         const totalPages = Math.ceil(total / pageSize);
 
-        setData(pageData || []);
+        setData((pageData || []) as T[]);
         setPagination({
           page,
           pageSize,

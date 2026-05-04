@@ -2,8 +2,8 @@ import { useCallback, useEffect, useRef } from 'react';
 import { authService } from '../services/AuthService';
 import { dataService } from '../services/DataService';
 import { Employee, Status } from '../types';
-import { useAuth, useAuthActions, useAppDataActions, useAppErrorActions } from '../stores/appStore';
-import { mapAttendanceRecordToUI, sortAttendanceByDateDesc } from '../utils/dataMapping';
+import { useAuth, useAuthActions, useAppDataActions, useAppErrorActions, useUIActions } from '../stores/appStore';
+import { mapAttendanceRecordToUI, sortAttendanceByDateDesc, mapEmployeeFromDatabase } from '../utils/dataMapping';
 
 const PERF_ENABLED = import.meta.env.DEV;
 const SESSION_CHECK_STUCK_MS = 15000;
@@ -64,6 +64,7 @@ export const useAppInitialization = () => {
     setDataLoading,
   } = useAppDataActions();
   const { setError: setAppError, setIsDatabaseError } = useAppErrorActions();
+  const { setView } = useUIActions();
 
   const loadAdminData = useCallback(async () => {
     // Use DataService to get employees from LOCAL database
@@ -73,24 +74,10 @@ export const useAppInitialization = () => {
       throw new Error(`Gagal mengambil data karyawan: ${employeesResult.error}`);
     }
 
-    const mapFromDatabase = (data: any) => ({
-      ...data,
-      ktpNumber: data.ktp_number,
-      bpjsKesehatan: data.bpjs_kesehatan,
-      bpjsKetenagakerjaan: data.bpjs_ketenagakerjaan,
-      maritalStatus: data.marital_status,
-      emergencyContacts: data.emergency_contacts,
-      workHistory: data.work_history,
-      bankAccount: data.bank_account,
-      isProfileCompleted: data.is_profile_completed,
-      isVerified: data.is_verified,
-      verifiedBy: data.verified_by,
-      verifiedAt: data.verified_at,
-      isLocked: data.is_locked,
-    });
+    // Menggunakan mapEmployeeFromDatabase dari utils
 
     const employeesWithCompensation = (employeesResult.data || []).map((emp) =>
-      mapFromDatabase({
+      mapEmployeeFromDatabase({
         ...emp,
         compensation: {
           gajiPokok: emp.gajiPokok || 0,
@@ -118,23 +105,7 @@ export const useAppInitialization = () => {
 
   const loadEmployeeData = useCallback(
     async (employeeId: string, profile: any) => {
-      const mapFromDatabase = (data: any) => ({
-        ...data,
-        ktpNumber: data.ktp_number,
-        bpjsKesehatan: data.bpjs_kesehatan,
-        bpjsKetenagakerjaan: data.bpjs_ketenagakerjaan,
-        maritalStatus: data.marital_status,
-        emergencyContacts: data.emergency_contacts,
-        workHistory: data.work_history,
-        bankAccount: data.bank_account,
-        isProfileCompleted: data.is_profile_completed,
-        isVerified: data.is_verified,
-        verifiedBy: data.verified_by,
-        verifiedAt: data.verified_at,
-        isLocked: data.is_locked,
-      });
-
-      const profileWithCompensation = mapFromDatabase({
+      const mappedProfile = mapEmployeeFromDatabase({
         ...profile,
         compensation: {
           gajiPokok: profile.gajiPokok || 0,
@@ -142,30 +113,60 @@ export const useAppInitialization = () => {
         },
       });
 
-      setEmployees([profileWithCompensation]);
+      const isKR = normalizeRole(profile.role) === 'kepala_ruangan';
+      const unitId = mappedProfile.unitKerjaId || (profile as any).unit_kerja_id;
 
-      // Use DataService to get employee data
-      const [attendanceResult, requestsResult, documentsResult] = await Promise.all([
-        timed('employee:attendance', () => dataService.getAttendance({ employeeId })),
-        timed('employee:requests', () => dataService.getRequests({ employeeId })),
-        timed('employee:documents', () => dataService.getDocuments({ employeeId })),
-      ]);
+      if (isKR && unitId) {
+        // Load all unit employees so Data Karyawan Unit, Kehadiran, Laporan work correctly
+        const unitEmployeesResult = await timed('kr:unitEmployees', () =>
+          dataService.getEmployeesByUnit(unitId)
+        );
+        const unitEmployees = (unitEmployeesResult.data || []).map((emp: any) =>
+          mapEmployeeFromDatabase({
+            ...emp,
+            compensation: { gajiPokok: emp.gajiPokok || 0, tunjanganProfesi: emp.tunjanganProfesi || 0 },
+          })
+        );
+        setEmployees(unitEmployees.length > 0 ? unitEmployees : [mappedProfile]);
 
-      if (!attendanceResult.success) {
-        throw new Error(`Gagal mengambil data kehadiran karyawan: ${attendanceResult.error}`);
+        const unitEmployeeIds = unitEmployees.map((e: any) => e.id as string);
+        const [attendanceResult, requestsResult, documentsResult] = await Promise.all([
+          timed('kr:attendance', () => dataService.getAttendance()),
+          timed('kr:requests', () => dataService.getRequests({ employeeId })),
+          timed('kr:documents', () => dataService.getDocuments({ employeeId })),
+        ]);
+
+        const allAttendance = (attendanceResult.data || []).map(mapAttendanceRecordToUI);
+        const unitAttendance = unitEmployeeIds.length > 0
+          ? allAttendance.filter((r: any) => unitEmployeeIds.includes(r.employeeId || r.employee_id))
+          : allAttendance;
+
+        setAttendanceRecords(sortAttendanceByDateDesc(unitAttendance));
+        setAllRequests(requestsResult.data || []);
+        setDocuments(documentsResult.data || []);
+      } else {
+        setEmployees([mappedProfile]);
+
+        const [attendanceResult, requestsResult, documentsResult] = await Promise.all([
+          timed('employee:attendance', () => dataService.getAttendance({ employeeId })),
+          timed('employee:requests', () => dataService.getRequests({ employeeId })),
+          timed('employee:documents', () => dataService.getDocuments({ employeeId })),
+        ]);
+
+        if (!attendanceResult.success) {
+          throw new Error(`Gagal mengambil data kehadiran karyawan: ${attendanceResult.error}`);
+        }
+        if (!requestsResult.success) {
+          throw new Error(`Gagal mengambil data permohonan karyawan: ${requestsResult.error}`);
+        }
+        if (!documentsResult.success) {
+          throw new Error(`Gagal mengambil data dokumen karyawan: ${documentsResult.error}`);
+        }
+
+        setAttendanceRecords(sortAttendanceByDateDesc((attendanceResult.data || []).map(mapAttendanceRecordToUI)));
+        setAllRequests(requestsResult.data || []);
+        setDocuments(documentsResult.data || []);
       }
-
-      if (!requestsResult.success) {
-        throw new Error(`Gagal mengambil data permohonan karyawan: ${requestsResult.error}`);
-      }
-
-      if (!documentsResult.success) {
-        throw new Error(`Gagal mengambil data dokumen karyawan: ${documentsResult.error}`);
-      }
-
-      setAttendanceRecords(sortAttendanceByDateDesc((attendanceResult.data || []).map(mapAttendanceRecordToUI)));
-      setAllRequests(requestsResult.data || []);
-      setDocuments(documentsResult.data || []);
     },
     [setEmployees, setAttendanceRecords, setAllRequests, setDocuments]
   );
@@ -245,10 +246,12 @@ export const useAppInitialization = () => {
         return;
       }
 
-      const profile = profileResult.data as Employee;
+      const rawProfile = profileResult.data as any;
+      const profile = mapEmployeeFromDatabase(rawProfile) as Employee;
 
       await enforceEmployeeAccess(session.user.email, profile);
       setAuthUser({ id: session.user.id, email: session.user.email, profile });
+      setView('dashboard');
 
       const [
         workUnitsResult,
@@ -406,6 +409,33 @@ export const useAppInitialization = () => {
       authListener?.subscription.unsubscribe();
     };
   }, [authUser, handleSession, setAuthLoading, setAuthUser, setIsResetPasswordPage]);
+
+  // Auto-refresh every 60s for admin/HRD + listen for manual refresh trigger
+  useEffect(() => {
+    if (!authUser || !isOperationalRole(authUser.profile.role)) return;
+
+    let isRefreshing = false;
+    const doRefresh = async () => {
+      if (isRefreshing || !mounted.current) return;
+      isRefreshing = true;
+      try {
+        setDataLoading(true);
+        await loadAdminData();
+      } catch { /* silent fail */ } finally {
+        if (mounted.current) setDataLoading(false);
+        isRefreshing = false;
+      }
+    };
+
+    const intervalId = window.setInterval(doRefresh, 60_000);
+    const onManualRefresh = () => { void doRefresh(); };
+    window.addEventListener('hrms:refresh-data', onManualRefresh);
+
+    return () => {
+      window.clearInterval(intervalId);
+      window.removeEventListener('hrms:refresh-data', onManualRefresh);
+    };
+  }, [authUser, loadAdminData, setDataLoading]);
 
   useEffect(() => {
     const refreshOnResume = () => {
