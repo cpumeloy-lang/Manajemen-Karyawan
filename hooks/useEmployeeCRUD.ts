@@ -98,64 +98,108 @@ export const useEmployeeCRUD = () => {
     console.log('[updateEmployee] Sending update for ID:', id);
     console.log('[updateEmployee] Payload keys:', Object.keys(updateData));
 
-    const authHeaders = await getAuthHeaders();
-    const response = await fetch(`/api/employees/${id}`, {
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-        ...authHeaders,
-      },
-      body: JSON.stringify({ updateData }),
-    });
-
-    const result = await response.json().catch(() => null);
-    if (!response.ok) {
-      throw new Error(result?.error || 'Database error');
-    }
-
-    const updatedEmployee = result?.data;
-
-    if (!updatedEmployee) {
-      throw new Error(
-        'Pembaruan data gagal: tidak ada baris yang diperbarui. ' +
-        'Pastikan Anda memiliki izin untuk mengubah data karyawan ini (RLS Policy).'
-      );
-    }
-
-    console.log('[updateEmployee] DB returned updated nama:', updatedEmployee.nama);
-
-    // Transform back to UI format
-    const employeeWithCompensation = mapEmployeeFromDatabase({
-      ...updatedEmployee,
+    // Optimistic update: apply changes to local state immediately
+    const optimisticEmployee = mapEmployeeFromDatabase({
+      ...employeeData,
+      gajiPokok: updateData.gajiPokok,
+      tunjanganProfesi: updateData.tunjanganProfesi,
       compensation: {
-        gajiPokok: updatedEmployee.gajiPokok || 0,
-        tunjanganProfesi: updatedEmployee.tunjanganProfesi || 0,
+        gajiPokok: updateData.gajiPokok || 0,
+        tunjanganProfesi: updateData.tunjanganProfesi || 0,
       },
     });
-
-    // Update local state IMMEDIATELY (optimistic update)
+    const previousEmployee = employees.find(e => e.id === id);
     setEmployees((prev) =>
-      prev.map((e) => (e.id === id ? employeeWithCompensation : e))
+      prev.map((e) => (e.id === id ? optimisticEmployee : e))
     );
 
-    await createAuditLog({
-      action: 'UPDATE',
-      entityType: 'employee',
-      entityId: updatedEmployee.id,
-      entityName: updatedEmployee.nama,
-      oldData: { id: employeeData.id },
-      newData: {
-        nama: updatedEmployee.nama,
-        email: updatedEmployee.email,
-        jabatan: updatedEmployee.jabatan,
-        departemen: updatedEmployee.departemen,
-      },
-      description: `Memperbarui data karyawan ${updatedEmployee.nama}`,
-      portalType: 'operational',
-      metadata: { source: 'useEmployeeCRUD.updateEmployee' },
-    });
+    try {
+      const authHeaders = await getAuthHeaders();
+      const response = await fetch(`/api/employees/${id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          ...authHeaders,
+        },
+        body: JSON.stringify({ updateData }),
+      });
 
-    showSuccess(`✅ Data karyawan ${updatedEmployee.nama} berhasil diperbarui dan tersimpan.`);
+      const result = await response.json().catch(() => null);
+      if (!response.ok) {
+        // Rollback optimistic update
+        if (previousEmployee) {
+          setEmployees((prev) =>
+            prev.map((e) => (e.id === id ? previousEmployee : e))
+          );
+        }
+        throw new Error(result?.error || 'Database error');
+      }
+
+      const updatedEmployee = result?.data;
+
+      if (!updatedEmployee) {
+        // Rollback optimistic update
+        if (previousEmployee) {
+          setEmployees((prev) =>
+            prev.map((e) => (e.id === id ? previousEmployee : e))
+          );
+        }
+        throw new Error(
+          'Pembaruan data gagal: tidak ada baris yang diperbarui. ' +
+          'Pastikan Anda memiliki izin untuk mengubah data karyawan ini (RLS Policy).'
+        );
+      }
+
+      console.log('[updateEmployee] DB returned updated nama:', updatedEmployee.nama);
+
+      // Handle password reset if new password provided
+      if (newPassword && newPassword.trim().length >= 6 && updatedEmployee.user_id) {
+        const { error: pwdError } = await (supabase as any).rpc('admin_reset_employee_password', {
+          target_user_id: updatedEmployee.user_id,
+          new_password: newPassword.trim(),
+        });
+        if (pwdError) {
+          console.warn('[updateEmployee] Password reset failed:', pwdError.message);
+          showSuccess(`✅ Data karyawan ${updatedEmployee.nama} berhasil diperbarui, tetapi reset password gagal: ${pwdError.message}`);
+        }
+      }
+
+      // Replace optimistic data with actual server response
+      const employeeWithCompensation = mapEmployeeFromDatabase({
+        ...updatedEmployee,
+        compensation: {
+          gajiPokok: updatedEmployee.gajiPokok || 0,
+          tunjanganProfesi: updatedEmployee.tunjanganProfesi || 0,
+        },
+      });
+
+      setEmployees((prev) =>
+        prev.map((e) => (e.id === id ? employeeWithCompensation : e))
+      );
+
+      await createAuditLog({
+        action: 'UPDATE',
+        entityType: 'employee',
+        entityId: updatedEmployee.id,
+        entityName: updatedEmployee.nama,
+        oldData: { id: employeeData.id },
+        newData: {
+          nama: updatedEmployee.nama,
+          email: updatedEmployee.email,
+          jabatan: updatedEmployee.jabatan,
+          departemen: updatedEmployee.departemen,
+          ...(newPassword ? { password_reset: true } : {}),
+        },
+        description: `Memperbarui data karyawan ${updatedEmployee.nama}${newPassword ? ' (termasuk reset password)' : ''}`,
+        portalType: 'operational',
+        metadata: { source: 'useEmployeeCRUD.updateEmployee' },
+      });
+
+      showSuccess(`✅ Data karyawan ${updatedEmployee.nama} berhasil diperbarui dan tersimpan.`);
+    } catch (fetchError) {
+      // Error already handled with rollback above; re-throw for handleSaveEmployee
+      throw fetchError;
+    }
   };
 
   const createEmployeeWithLogin = async (

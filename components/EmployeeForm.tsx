@@ -365,10 +365,23 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ isOpen, onClose, onSave, em
     };
     
     const handleVerify = async () => {
+        const isValid = await validateForm();
+        if (!isValid) return;
+
+        const profileCompleted = !!(
+            employee.nama && 
+            employee.email && 
+            employee.birthDate &&
+            employee.ktpNumber &&
+            employee.address?.ktp &&
+            employee.bankAccount?.accountNumber
+        );
+
         const updatedEmployee = {
             ...employee,
             isVerified: true,
             verifiedAt: new Date().toISOString(),
+            isProfileCompleted: profileCompleted,
             // verifiedBy will be set by App.tsx with current user ID
         };
         onSave(updatedEmployee);
