@@ -2,8 +2,6 @@ apply plugin: "com.android.application"
 apply plugin: "org.jetbrains.kotlin.android"
 apply plugin: "com.facebook.react"
 
-apply from: new File(["node", "--print", "require.resolve('expo/package.json')"].execute(null, rootDir).text.trim(), "../scripts/autolinking.gradle")
-
 def projectRoot = rootDir.getAbsoluteFile().getParentFile().getAbsolutePath()
 
 static def versionToNumber(major, minor, patch) {
@@ -26,6 +24,45 @@ def getRNVersion() {
   )
 }
 def rnVersion = getRNVersion()
+
+def isReleaseBuildRequested = gradle.startParameter.taskNames.any { taskName ->
+    def lowerTaskName = taskName.toLowerCase()
+    return lowerTaskName.contains('release') || lowerTaskName.contains('bundle')
+}
+
+def readReleaseSigningConfig = {
+    def keystorePath = (findProperty('HRMS_RELEASE_STORE_FILE') ?: System.getenv('HRMS_RELEASE_STORE_FILE'))?.toString()?.trim()
+    def storePassword = (findProperty('HRMS_RELEASE_STORE_PASSWORD') ?: System.getenv('HRMS_RELEASE_STORE_PASSWORD'))?.toString()?.trim()
+    def keyAlias = (findProperty('HRMS_RELEASE_KEY_ALIAS') ?: System.getenv('HRMS_RELEASE_KEY_ALIAS'))?.toString()?.trim()
+    def keyPassword = (findProperty('HRMS_RELEASE_KEY_PASSWORD') ?: System.getenv('HRMS_RELEASE_KEY_PASSWORD'))?.toString()?.trim()
+
+    def missing = []
+    if (!keystorePath) missing << 'HRMS_RELEASE_STORE_FILE'
+    if (!storePassword) missing << 'HRMS_RELEASE_STORE_PASSWORD'
+    if (!keyAlias) missing << 'HRMS_RELEASE_KEY_ALIAS'
+    if (!keyPassword) missing << 'HRMS_RELEASE_KEY_PASSWORD'
+
+    if (!missing.isEmpty()) {
+        throw new GradleException(
+            'Release signing is not configured. Set ' + missing.join(', ') +
+                ' in ~/.gradle/gradle.properties or as environment variables.'
+        )
+    }
+
+    def keystoreFile = file(keystorePath)
+    if (!keystoreFile.exists()) {
+        throw new GradleException("Release keystore not found: ${keystoreFile.absolutePath}")
+    }
+
+    return [
+        storeFile: keystoreFile,
+        storePassword: storePassword,
+        keyAlias: keyAlias,
+        keyPassword: keyPassword,
+    ]
+}
+
+def releaseSigningConfig = isReleaseBuildRequested ? readReleaseSigningConfig() : null
 
 /**
  * This is the configuration block to customize your React Native Android app.
@@ -107,11 +144,6 @@ def jscFlavor = 'org.webkit:android-jsc:+'
 
 android {
     ndkVersion rootProject.ext.ndkVersion
-    externalNativeBuild {
-        cmake {
-            version "3.22.1"
-        }
-    }
 
     buildToolsVersion rootProject.ext.buildToolsVersion
     compileSdk rootProject.ext.compileSdkVersion
@@ -132,14 +164,11 @@ android {
             keyPassword 'android'
         }
         release {
-            // Production keystore — values from gradle.properties (NEVER commit to git)
-            // Generate: keytool -genkeypair -v -keystore hrms-release.keystore -alias hrms-key -keyalg RSA -keysize 2048 -validity 10000
-            def releaseKeystore = System.getenv("HRMS_RELEASE_STORE_FILE") ?: findProperty('HRMS_RELEASE_STORE_FILE')
-            if (releaseKeystore) {
-                storeFile file(releaseKeystore)
-                storePassword System.getenv("HRMS_RELEASE_STORE_PASSWORD") ?: findProperty('HRMS_RELEASE_STORE_PASSWORD')
-                keyAlias System.getenv("HRMS_RELEASE_KEY_ALIAS") ?: findProperty('HRMS_RELEASE_KEY_ALIAS')
-                keyPassword System.getenv("HRMS_RELEASE_KEY_PASSWORD") ?: findProperty('HRMS_RELEASE_KEY_PASSWORD')
+            if (releaseSigningConfig != null) {
+                storeFile releaseSigningConfig.storeFile
+                storePassword releaseSigningConfig.storePassword
+                keyAlias releaseSigningConfig.keyAlias
+                keyPassword releaseSigningConfig.keyPassword
             }
         }
     }
@@ -148,26 +177,17 @@ android {
             signingConfig signingConfigs.debug
         }
         release {
-            // Use release signing if keystore configured, otherwise fall back to debug (with warning)
-            def hasReleaseKey = System.getenv("HRMS_RELEASE_STORE_FILE") != null || project.hasProperty('HRMS_RELEASE_STORE_FILE')
-            if (hasReleaseKey) {
-                signingConfig signingConfigs.release
-            } else {
-                println "⚠️  WARNING: Release APK akan di-sign dengan DEBUG keystore. Setup HRMS_RELEASE_STORE_FILE sebelum publish!"
-                signingConfig signingConfigs.debug
-            }
-            shrinkResources (findProperty('android.enableShrinkResourcesInReleaseBuilds')?.toBoolean() ?: true)
-            minifyEnabled (findProperty('android.enableProguardInReleaseBuilds')?.toBoolean() ?: true)
-            proguardFiles getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro"
+            signingConfig signingConfigs.release
+            shrinkResources (findProperty('android.enableShrinkResourcesInReleaseBuilds')?.toBoolean() ?: false)
+            minifyEnabled enableProguardInReleaseBuilds
+            proguardFiles getDefaultProguardFile("proguard-android.txt"), "proguard-rules.pro"
             crunchPngs (findProperty('android.enablePngCrunchInReleaseBuilds')?.toBoolean() ?: true)
-            debuggable false
         }
     }
     packagingOptions {
         jniLibs {
             useLegacyPackaging (findProperty('expo.useLegacyPackaging')?.toBoolean() ?: false)
         }
-            pickFirsts += ['lib/arm64-v8a/libc++_shared.so', 'lib/x86_64/libc++_shared.so']
     }
 }
 
@@ -192,27 +212,24 @@ android {
 }
 
 dependencies {
-    addExpoModulesDependencies(project.dependencies, project)
-
     // The version of react-native is set by the React Native Gradle Plugin
     implementation("com.facebook.react:react-android")
 
     def isGifEnabled = (findProperty('expo.gif.enabled') ?: "") == "true";
     def isWebpEnabled = (findProperty('expo.webp.enabled') ?: "") == "true";
     def isWebpAnimatedEnabled = (findProperty('expo.webp.animated') ?: "") == "true";
-    def frescoVersion = binding.hasVariable('reactAndroidLibs') ? reactAndroidLibs.versions.fresco.get() : '3.1.3'
 
     if (isGifEnabled) {
         // For animated gif support
-        implementation("com.facebook.fresco:animated-gif:${frescoVersion}")
+        implementation("com.facebook.fresco:animated-gif:${reactAndroidLibs.versions.fresco.get()}")
     }
 
     if (isWebpEnabled) {
         // For webp support
-        implementation("com.facebook.fresco:webpsupport:${frescoVersion}")
+        implementation("com.facebook.fresco:webpsupport:${reactAndroidLibs.versions.fresco.get()}")
         if (isWebpAnimatedEnabled) {
             // Animated webp support
-            implementation("com.facebook.fresco:animated-webp:${frescoVersion}")
+            implementation("com.facebook.fresco:animated-webp:${reactAndroidLibs.versions.fresco.get()}")
         }
     }
 
