@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../services/supabaseClient';
+import { deleteAllAuditLogs, clearOldAuditLogs } from '../services/auditLogService';
 
 const AUDIT_LOG_UNAVAILABLE_CACHE_KEY = 'hrms.audit_logs_unavailable';
 const AUDIT_LOG_ALL_SOURCES_UNAVAILABLE_CACHE_KEY = 'hrms.audit_logs_all_sources_unavailable';
@@ -106,6 +107,9 @@ const AuditLogViewer: React.FC<AuditLogViewerProps> = ({ onClose, isInline = fal
         search: ''
     });
     const [expandedLog, setExpandedLog] = useState<string | null>(null);
+    const [isDeleting, setIsDeleting] = useState(false);
+    const [showDeleteConfirm, setShowDeleteConfirm] = useState<'all' | 'old' | null>(null);
+    const [deleteDays, setDeleteDays] = useState(30);
 
     useEffect(() => {
         fetchAuditLogs();
@@ -284,6 +288,34 @@ const AuditLogViewer: React.FC<AuditLogViewerProps> = ({ onClose, isInline = fal
         setAllAuditSourcesUnavailable(false);
         setAuditLogUnavailableMessage('');
         fetchAuditLogs();
+    };
+
+    const handleDeleteAllLogs = async () => {
+        setIsDeleting(true);
+        try {
+            const result = await deleteAllAuditLogs();
+            setShowDeleteConfirm(null);
+            alert(`✅ Berhasil menghapus ${result.deletedCount} audit log.`);
+            fetchAuditLogs();
+        } catch (error: any) {
+            alert(`❌ Gagal: ${error?.message || 'Terjadi kesalahan'}`);
+        } finally {
+            setIsDeleting(false);
+        }
+    };
+
+    const handleClearOldLogs = async () => {
+        setIsDeleting(true);
+        try {
+            const result = await clearOldAuditLogs(deleteDays);
+            setShowDeleteConfirm(null);
+            alert(`✅ Berhasil menghapus ${result.deletedCount} log yang lebih lama dari ${deleteDays} hari.`);
+            fetchAuditLogs();
+        } catch (error: any) {
+            alert(`❌ Gagal: ${error?.message || 'Terjadi kesalahan'}`);
+        } finally {
+            setIsDeleting(false);
+        }
     };
 
     const getActionBadge = (action: string) => {
@@ -583,18 +615,80 @@ const AuditLogViewer: React.FC<AuditLogViewerProps> = ({ onClose, isInline = fal
 
                 {/* Footer */}
                 <div className="p-4 border-t border-gray-200 bg-gray-50">
-                    <div className="flex justify-between items-center">
+                    <div className="flex justify-between items-center flex-wrap gap-3">
                         <p className="text-sm text-gray-600">
                             Total: <span className="font-semibold">{logs.length}</span> aktivitas
                         </p>
-                        <button
-                            onClick={onClose}
-                            className="px-6 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors font-medium"
-                        >
-                            Tutup
-                        </button>
+                        <div className="flex items-center gap-3">
+                            <button
+                                onClick={() => setShowDeleteConfirm('old')}
+                                disabled={isDeleting || logs.length === 0}
+                                className="px-4 py-2 bg-amber-100 text-amber-700 rounded-lg hover:bg-amber-200 transition-colors font-medium text-sm disabled:opacity-50"
+                            >
+                                {isDeleting ? '⏳' : '🧹'} Hapus &gt; {deleteDays} Hari
+                            </button>
+                            <button
+                                onClick={() => setShowDeleteConfirm('all')}
+                                disabled={isDeleting || logs.length === 0}
+                                className="px-4 py-2 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 transition-colors font-medium text-sm disabled:opacity-50"
+                            >
+                                {isDeleting ? '⏳' : '🗑️'} Hapus Semua
+                            </button>
+                            {!isInline && onClose && (
+                                <button
+                                    onClick={onClose}
+                                    className="px-6 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors font-medium"
+                                >
+                                    Tutup
+                                </button>
+                            )}
+                        </div>
                     </div>
                 </div>
+
+                {/* Delete Confirmation Dialog */}
+                {showDeleteConfirm && (
+                    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60]">
+                        <div className="bg-white rounded-xl shadow-2xl p-6 max-w-md w-full mx-4">
+                            <h3 className="text-lg font-bold text-gray-800 mb-2">
+                                {showDeleteConfirm === 'all' ? 'Hapus Semua Audit Log' : 'Bersihkan Log Lama'}
+                            </h3>
+                            <p className="text-sm text-gray-600 mb-4">
+                                {showDeleteConfirm === 'all'
+                                    ? 'Anda akan menghapus SELURUH history aktivitas. Data yang sudah dihapus tidak dapat dikembalikan.'
+                                    : `Hapus semua log yang lebih lama dari ${deleteDays} hari? Log yang lebih baru akan tetap tersimpan.`}
+                            </p>
+                            {showDeleteConfirm === 'old' && (
+                                <div className="mb-4">
+                                    <label className="block text-xs font-medium text-gray-700 mb-1">Hapus log lebih lama dari (hari)</label>
+                                    <input
+                                        type="number"
+                                        value={deleteDays}
+                                        onChange={(e) => setDeleteDays(Math.max(1, parseInt(e.target.value) || 30))}
+                                        min="1"
+                                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
+                                    />
+                                </div>
+                            )}
+                            <div className="flex gap-3 justify-end">
+                                <button
+                                    onClick={() => setShowDeleteConfirm(null)}
+                                    disabled={isDeleting}
+                                    className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 font-medium text-sm"
+                                >
+                                    Batal
+                                </button>
+                                <button
+                                    onClick={showDeleteConfirm === 'all' ? handleDeleteAllLogs : handleClearOldLogs}
+                                    disabled={isDeleting}
+                                    className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 font-medium text-sm"
+                                >
+                                    {isDeleting ? 'Menghapus...' : 'Ya, Hapus'}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )}
             </div>
         </div>
     );

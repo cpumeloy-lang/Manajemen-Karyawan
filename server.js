@@ -579,6 +579,55 @@ app.delete('/api/employees/:id', async (req, res) => {
   }
 });
 
+// ── Audit Log Cleanup (Admin only) ──
+app.delete('/api/audit-logs', async (req, res) => {
+  try {
+    if (!adminSupabase || !publicSupabase) {
+      return res.status(503).json({ success: false, error: 'Supabase server clients are not configured' });
+    }
+
+    const context = await getRequesterContext(req);
+    if (!context.ok) {
+      return res.status(context.status).json({ success: false, error: context.error });
+    }
+
+    if (context.role !== 'admin') {
+      return res.status(403).json({ success: false, error: 'Hanya admin yang dapat menghapus audit log' });
+    }
+
+    const olderThanDays = parseInt(req.query.olderThanDays, 10) || 0;
+
+    if (olderThanDays > 0) {
+      // Delete logs older than X days via RPC
+      const { data, error } = await adminSupabase.rpc('cleanup_old_audit_logs', {
+        older_than_days: olderThanDays,
+      });
+
+      if (error) {
+        logDetailedError('AuditLog.cleanup', error, { olderThanDays });
+        return res.status(400).json({ success: false, error: error.message || 'Gagal membersihkan log lama' });
+      }
+
+      const deletedCount = data?.[0]?.deleted_count || 0;
+      return res.json({ success: true, data: { deletedCount, olderThanDays } });
+    } else {
+      // Delete all logs via RPC
+      const { data, error } = await adminSupabase.rpc('delete_all_audit_logs');
+
+      if (error) {
+        logDetailedError('AuditLog.deleteAll', error, {});
+        return res.status(400).json({ success: false, error: error.message || 'Gagal menghapus semua log' });
+      }
+
+      const deletedCount = data?.[0]?.deleted_count || 0;
+      return res.json({ success: true, data: { deletedCount } });
+    }
+  } catch (err) {
+    logDetailedError('AuditLog.delete.endpoint', err, {});
+    return res.status(500).json({ success: false, error: getClientErrorMessage('internal_error', 'internal_error') });
+  }
+});
+
 app.post('/api/organization/units', async (req, res) => {
   try {
     if (!adminSupabase || !publicSupabase) {
