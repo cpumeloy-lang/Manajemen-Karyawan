@@ -155,27 +155,29 @@ const normalizeEmployeeData = (employeeData) => pick(employeeData, [
   'nomorSTR',
   'tanggalKadaluarsaSTR',
   'unitKerjaId',
+  'gajiPokok',
+  'tunjanganProfesi',
   'sertifikasi',
   'kompetensi',
-  'compensation',
-  'ktpNumber',
   'npwp',
-  'bpjsKesehatan',
-  'bpjsKetenagakerjaan',
   'agama',
-  'maritalStatus',
   'dependents',
   'address',
-  'emergencyContacts',
   'education',
-  'workHistory',
-  'bankAccount',
-  'isProfileCompleted',
-  'isVerified',
-  'verifiedBy',
-  'verifiedAt',
-  'isLocked',
-  'managedUnitId',
+  // Extended fields (snake_case - matches DB columns from cloud_migration_patch)
+  'ktp_number',
+  'bpjs_kesehatan',
+  'bpjs_ketenagakerjaan',
+  'marital_status',
+  'emergency_contacts',
+  'work_history',
+  'bank_account',
+  'is_profile_completed',
+  'is_verified',
+  'verified_by',
+  'verified_at',
+  'is_locked',
+  'managed_unit_id',
 ]);
 
 const normalizeEmployeeUpdateData = (updateData) => pick(updateData, [
@@ -201,25 +203,25 @@ const normalizeEmployeeUpdateData = (updateData) => pick(updateData, [
   'tunjanganProfesi',
   'sertifikasi',
   'kompetensi',
-  'compensation',
-  'ktpNumber',
   'npwp',
-  'bpjsKesehatan',
-  'bpjsKetenagakerjaan',
   'agama',
-  'maritalStatus',
   'dependents',
   'address',
-  'emergencyContacts',
   'education',
-  'workHistory',
-  'bankAccount',
-  'isProfileCompleted',
-  'isVerified',
-  'verifiedBy',
-  'verifiedAt',
-  'isLocked',
-  'managedUnitId',
+  // Extended fields (snake_case - matches DB columns from cloud_migration_patch)
+  'ktp_number',
+  'bpjs_kesehatan',
+  'bpjs_ketenagakerjaan',
+  'marital_status',
+  'emergency_contacts',
+  'work_history',
+  'bank_account',
+  'is_profile_completed',
+  'is_verified',
+  'verified_by',
+  'verified_at',
+  'is_locked',
+  'managed_unit_id',
 ]);
 
 const normalizeUnitData = (unit) => pick(unit, ['id', 'nama', 'shifts', 'shift_assignments']);
@@ -519,7 +521,7 @@ app.put('/api/employees/:id', async (req, res) => {
     if (error || !updatedEmployee) {
       logDetailedError('Employee.update', error, { employeeId: req.params.id, sanitizedKeys: Object.keys(sanitizedUpdate) });
       const errMsg = IS_PROD
-        ? getClientErrorMessage('profile_update_failed', 'Gagal memperbarui profil karyawan')
+        ? `Gagal memperbarui: ${error?.message || error?.details || 'karyawan tidak ditemukan'}`
         : `Gagal memperbarui: ${error?.message || error?.details || 'karyawan tidak ditemukan'}`;
       return res.status(400).json({ success: false, error: errMsg });
     }
