@@ -4,6 +4,7 @@ import { dataService } from '../services/DataService';
 import { Employee, Status } from '../types';
 import { useAuth, useAuthActions, useAppDataActions, useAppErrorActions, useUIActions } from '../stores/appStore';
 import { mapAttendanceRecordToUI, sortAttendanceByDateDesc, mapEmployeeFromDatabase } from '../utils/dataMapping';
+import { classifyError } from '../services/errorHandlingService';
 
 const PERF_ENABLED = import.meta.env.DEV;
 const SESSION_CHECK_STUCK_MS = 15000;
@@ -315,7 +316,7 @@ export const useAppInitialization = () => {
           }
         } catch (backgroundError: any) {
           if (!mounted.current) return;
-          setAppError(`Terjadi kesalahan saat memuat data lanjutan: ${backgroundError.message}`);
+          setAppError(`Terjadi kesalahan saat memuat data lanjutan: ${classifyError(backgroundError).userMessage}`);
         } finally {
           if (mounted.current) {
             setDataLoading(false);
@@ -324,7 +325,7 @@ export const useAppInitialization = () => {
       })();
     } catch (err: any) {
       if (!mounted.current) return;
-      setAppError(`Terjadi kesalahan: ${err.message}`);
+      setAppError(`Terjadi kesalahan: ${classifyError(err).userMessage}`);
       setDataLoading(false);
       setAuthLoading(false);
     } finally {

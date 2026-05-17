@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../services/supabaseClient.ts';
+import { classifyError } from '../services/errorHandlingService.ts';
 
 const ResetPassword: React.FC = () => {
     const [newPassword, setNewPassword] = useState('');
@@ -93,7 +94,7 @@ const ResetPassword: React.FC = () => {
                 window.location.href = '/';
             }, 2000);
         } catch (err: any) {
-            setError(err.message || 'Gagal reset password');
+            setError(classifyError(err).userMessage);
         } finally {
             setLoading(false);
         }

@@ -1,5 +1,6 @@
 import { useCallback } from 'react';
 import { useAppErrorActions, useUIActions, useUI } from '../stores/appStore';
+import { classifyError } from '../services/errorHandlingService';
 
 export const useMessageHandlers = () => {
   const { setError: setAppError } = useAppErrorActions();
@@ -19,9 +20,7 @@ export const useMessageHandlers = () => {
     (label: string, err?: unknown) => {
       const detail = err === undefined || err === null
         ? ''
-        : err instanceof Error
-          ? err.message
-          : String(err);
+        : classifyError(err).userMessage;
       const errorMessage = detail ? `${label}: ${detail}` : label;
       setAppError(errorMessage);
       if (detail) {

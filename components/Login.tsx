@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import DatabaseStatus from './DatabaseStatus';
 import LoadingSpinner from './LoadingSpinner';
 import ForgotPassword from './ForgotPassword';
+import { classifyError } from '../services/errorHandlingService';
 import { supabase } from '../services/supabaseClient';
 import { generateCSRFToken, storeCSRFToken } from '../services/securityUtils';
 
@@ -80,7 +81,7 @@ const Login: React.FC<LoginProps> = ({ onLogin, initialError }) => {
                 window.location.href = data.url;
             }
         } catch (err: any) {
-            setError(err.message || 'Gagal login dengan Google');
+            setError(classifyError(err).userMessage);
         } finally {
             setGoogleLoading(false);
         }
@@ -143,7 +144,7 @@ const Login: React.FC<LoginProps> = ({ onLogin, initialError }) => {
                 localStorage.setItem('loginLockout', lockoutTime.toISOString());
                 setError(`Terlalu banyak percobaan login. Coba lagi dalam 15 menit.`);
             } else {
-                setError(err.message || 'Login gagal. Periksa kembali email dan password Anda.');
+                setError(classifyError(err).userMessage);
             }
         } finally {
             setLoading(false);

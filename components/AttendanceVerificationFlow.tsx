@@ -3,6 +3,7 @@ import * as faceapi from 'face-api.js';
 import { faceVerificationService, type FaceVerificationResult } from '../services/faceVerificationService.ts';
 import { livenessDetectionService } from '../services/livenessDetectionService.ts';
 import { XMarkIcon, CheckCircleIcon } from './icons.tsx';
+import { classifyError } from '../services/errorHandlingService.ts';
 
 interface AttendanceVerificationFlowProps {
     isOpen: boolean;
@@ -276,12 +277,12 @@ const AttendanceVerificationFlow: React.FC<AttendanceVerificationFlowProps> = ({
                                 }
                             }, 'image/jpeg', 0.8);
                         } else {
-                            setError(`❌ Wajah tidak cocok. ${result.message}`);
+                            setError(`Wajah tidak cocok. ${classifyError(result).userMessage}`);
                             setCurrentStep('error');
                         }
                     } catch (err: any) {
                         console.error('Verification error:', err);
-                        setError(`Gagal verifikasi: ${err.message}`);
+                        setError(classifyError(err).userMessage);
                         setCurrentStep('error');
                     }
                 }, 'image/jpeg', 0.8);
