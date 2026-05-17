@@ -938,7 +938,11 @@ app.use((err, req, res, next) => {
   res.status(500).json({ error: IS_PROD ? 'Internal server error' : err.message });
 });
 
-// ── Start ──
-app.listen(PORT, () => {
-  console.log(`HRMS Pro server running on port ${PORT} [${IS_PROD ? 'PRODUCTION' : 'DEVELOPMENT'}]`);
-});
+// ── Start (skip listen in Vercel serverless environment) ──
+if (!process.env.VERCEL) {
+  app.listen(PORT, () => {
+    console.log(`HRMS Pro server running on port ${PORT} [${IS_PROD ? 'PRODUCTION' : 'DEVELOPMENT'}]`);
+  });
+}
+
+export default app;
