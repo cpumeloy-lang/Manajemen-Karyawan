@@ -125,7 +125,7 @@ export const useAppShell = (): [AppShellState, AppShellActions] => {
 
     // Apply search filter
     filteredEmployees = filteredEmployees.filter((e) =>
-      e.nama.toLowerCase().includes(searchTerm.toLowerCase())
+      String(e?.nama || '').toLowerCase().includes(String(searchTerm || '').toLowerCase())
     );
 
     // Apply sorting

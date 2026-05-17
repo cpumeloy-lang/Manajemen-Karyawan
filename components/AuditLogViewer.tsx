@@ -158,7 +158,7 @@ const AuditLogViewer: React.FC<AuditLogViewerProps> = ({ onClose, isInline = fal
             if (filter.portal_type !== 'ALL' && getLogPortalType(item) !== filter.portal_type) return false;
             if (filter.user_email !== 'ALL' && item.user_email !== filter.user_email) return false;
             if (filter.search) {
-                const needle = filter.search.toLowerCase();
+                const needle = String(filter.search || '').toLowerCase();
                 const hay = `${item.description || ''} ${item.entity_name || ''}`.toLowerCase();
                 if (!hay.includes(needle)) return false;
             }

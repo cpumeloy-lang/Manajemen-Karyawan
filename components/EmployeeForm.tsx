@@ -21,7 +21,7 @@ interface EmployeeFormProps {
 
 const EmployeeForm: React.FC<EmployeeFormProps> = ({ isOpen, onClose, onSave, employeeToEdit, workUnits, departments, positions, currentUserRole }) => {
     // Tentukan apakah user adalah admin/HRD dari props
-    const normalizedRole = (currentUserRole || '').trim().toLowerCase();
+    const normalizedRole = String(currentUserRole || '').trim().toLowerCase();
     const isAdmin = normalizedRole === 'admin' || normalizedRole === 'hrd' || normalizedRole === 'hr';
     const initialCompensation: Compensation = { gajiPokok: 0, tunjanganProfesi: 0 };
     const initialAddress: Address = { ktp: '', domisili: '', province: '', city: '', postalCode: '' };
