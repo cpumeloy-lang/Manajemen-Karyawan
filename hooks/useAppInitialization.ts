@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef } from 'react';
 import { authService } from '../services/AuthService';
 import { dataService } from '../services/DataService';
 import { Employee, Status } from '../types';
-import { useAuth, useAuthActions, useAppDataActions, useAppErrorActions, useUIActions } from '../stores/appStore';
+import { useAuth, useAuthActions, useAppDataActions, useAppErrorActions, useUI, useUIActions } from '../stores/appStore';
 import { mapAttendanceRecordToUI, sortAttendanceByDateDesc, mapEmployeeFromDatabase } from '../utils/dataMapping';
 import { classifyError } from '../services/errorHandlingService';
 
@@ -65,7 +65,9 @@ export const useAppInitialization = () => {
     setDataLoading,
   } = useAppDataActions();
   const { setError: setAppError, setIsDatabaseError } = useAppErrorActions();
-  const { setView } = useUIActions();
+  const { setView, setActivePortal } = useUIActions();
+  const currentView = useUI().view;
+  const currentPortal = useUI().activePortal;
 
   const loadAdminData = useCallback(async () => {
     // Use DataService to get employees from LOCAL database
@@ -252,7 +254,14 @@ export const useAppInitialization = () => {
 
       await enforceEmployeeAccess(session.user.email, profile);
       setAuthUser({ id: session.user.id, email: session.user.email, profile });
-      setView('dashboard');
+
+      // Only set default view/portal on first login (no persisted state).
+      // On page refresh, zustand persist already restores the last active view.
+      if (!currentPortal) {
+        const isOp = isOperationalRole(profile.role);
+        setActivePortal(isOp ? 'operational' : 'personal');
+        setView(isOp ? 'dashboard' : 'personal-dashboard');
+      }
 
       const [
         workUnitsResult,

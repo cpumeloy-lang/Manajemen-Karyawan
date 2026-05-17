@@ -1,4 +1,5 @@
 import express from 'express';
+import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { createReadStream, existsSync } from 'fs';
@@ -6,6 +7,8 @@ import { createGzip } from 'zlib';
 import { createClient } from '@supabase/supabase-js';
 import loggingService from './services/loggingService.js';
 import { getRedisStats } from './services/redisAdapter.js';
+
+dotenv.config();
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -29,6 +32,9 @@ const adminSupabase = SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY
       auth: { persistSession: false, autoRefreshToken: false },
     })
   : null;
+
+// Fallback for local development: use anon key if service role key not available
+const auditLogSupabase = adminSupabase || publicSupabase;
 
 const invalidateEmployeeCaches = async (employee) => {
   try {
@@ -63,7 +69,7 @@ const getBearerToken = (req) => {
 };
 
 const getRequesterContext = async (req) => {
-  if (!publicSupabase || !adminSupabase) {
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
     return { ok: false, status: 503, error: 'Supabase server clients are not configured' };
   }
 
@@ -77,7 +83,17 @@ const getRequesterContext = async (req) => {
     return { ok: false, status: 401, error: 'Invalid or expired session' };
   }
 
-  const { data: employee, error: employeeError } = await adminSupabase
+  // Use adminSupabase (bypasses RLS) if available, otherwise create
+  // a per-request authenticated client with the user's JWT token
+  let dbClient = adminSupabase;
+  if (!dbClient) {
+    dbClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+      auth: { persistSession: false, autoRefreshToken: false },
+      global: { headers: { Authorization: `Bearer ${token}` } },
+    });
+  }
+
+  const { data: employee, error: employeeError } = await dbClient
     .from('employees')
     .select('id, user_id, role, "unitKerjaId", nama, email')
     .eq('user_id', user.id)
@@ -582,8 +598,8 @@ app.delete('/api/employees/:id', async (req, res) => {
 // ── Audit Log Cleanup (Admin only) ──
 app.delete('/api/audit-logs', async (req, res) => {
   try {
-    if (!adminSupabase || !publicSupabase) {
-      return res.status(503).json({ success: false, error: 'Supabase server clients are not configured' });
+    if (!auditLogSupabase) {
+      return res.status(503).json({ success: false, error: 'Supabase client not configured' });
     }
 
     const context = await getRequesterContext(req);
@@ -599,7 +615,7 @@ app.delete('/api/audit-logs', async (req, res) => {
 
     if (olderThanDays > 0) {
       // Delete logs older than X days via RPC
-      const { data, error } = await adminSupabase.rpc('cleanup_old_audit_logs', {
+      const { data, error } = await auditLogSupabase.rpc('cleanup_old_audit_logs', {
         older_than_days: olderThanDays,
       });
 
@@ -612,7 +628,7 @@ app.delete('/api/audit-logs', async (req, res) => {
       return res.json({ success: true, data: { deletedCount, olderThanDays } });
     } else {
       // Delete all logs via RPC
-      const { data, error } = await adminSupabase.rpc('delete_all_audit_logs');
+      const { data, error } = await auditLogSupabase.rpc('delete_all_audit_logs');
 
       if (error) {
         logDetailedError('AuditLog.deleteAll', error, {});
