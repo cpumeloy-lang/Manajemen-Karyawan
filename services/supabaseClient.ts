@@ -8,7 +8,7 @@ if (configuredSupabaseUrl && configuredSupabaseUrl.includes('<IP_KOMPUTER_SERVER
 }
 
 const supabaseUrl =
-  configuredSupabaseUrl.toLowerCase() === 'auto'
+  (!configuredSupabaseUrl || configuredSupabaseUrl.toLowerCase() === 'auto')
     ? `${window.location.protocol}//${window.location.hostname}:54321`
     : configuredSupabaseUrl;
 const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;

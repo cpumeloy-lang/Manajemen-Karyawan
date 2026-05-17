@@ -16,11 +16,19 @@ export const useMessageHandlers = () => {
   }, [setSuccessMessage]);
 
   const showError = useCallback(
-    (label: string, err: unknown) => {
-      const detail = err instanceof Error ? err.message : String(err);
-      const errorMessage = `${label}: ${detail}`;
+    (label: string, err?: unknown) => {
+      const detail = err === undefined || err === null
+        ? ''
+        : err instanceof Error
+          ? err.message
+          : String(err);
+      const errorMessage = detail ? `${label}: ${detail}` : label;
       setAppError(errorMessage);
-      console.error(errorMessage, err);
+      if (detail) {
+        console.error(errorMessage, err);
+      } else {
+        console.error(errorMessage);
+      }
     },
     [setAppError]
   );

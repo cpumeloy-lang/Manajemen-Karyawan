@@ -23,6 +23,12 @@ export const useEmployeeImport = () => {
   const { setEmployees } = useAppDataActions();
   const { showSuccess, showError } = useMessageHandlers();
 
+  const getAuthHeaders = useCallback(async () => {
+    const { data } = await supabase.auth.getSession();
+    const token = data.session?.access_token;
+    return token ? { Authorization: `Bearer ${token}` } : {};
+  }, []);
+
   const getField = useCallback(getImportField, []);
 
   const normalizeMaritalStatus = useCallback(normalizeImportMaritalStatus, []);
@@ -240,16 +246,24 @@ export const useEmployeeImport = () => {
             };
 
             const profileData = mapEmployeeToDatabase(newEmployee);
+            const authHeaders = await getAuthHeaders();
+            const response = await fetch('/api/employees', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                ...authHeaders,
+              },
+              body: JSON.stringify({ employeeData: profileData }),
+            });
 
-            const { data: insertedEmployee, error: insertError } =
-              await supabase
-                .from('employees')
-                .insert(profileData)
-                .select()
-                .single();
+            const result = await response.json().catch(() => null);
+            if (!response.ok) {
+              throw new Error(result?.error || 'Gagal mengimpor karyawan');
+            }
 
-            if (insertError) {
-              throw insertError;
+            const insertedEmployee = result?.data;
+            if (!insertedEmployee) {
+              throw new Error('Data karyawan tidak berhasil dibuat di server.');
             }
 
             const employeeWithCompensation = mapEmployeeFromDatabase({
@@ -335,6 +349,7 @@ export const useEmployeeImport = () => {
       downloadErrorReport,
       getField,
       normalizeMaritalStatus,
+      getAuthHeaders,
     ]
   );
 

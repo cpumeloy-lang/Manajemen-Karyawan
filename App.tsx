@@ -1,4 +1,3 @@
-
 /**
  * App.tsx - REFACTORED
  * 
@@ -49,23 +48,32 @@ import { Sidebar } from './components/Sidebar/Sidebar.tsx';
 import { AppHeader } from './components/AppHeader.tsx';
 
 
-const App: React.FC = () => {
+/**
+ * AppContent component - All main hooks called here
+ * Separated from conditional logic to fix React hook order violations
+ */
+const AppContent: React.FC = () => {
+  // ====================================================================
+  // ALL HOOKS MUST BE CALLED UNCONDITIONALLY AT THE TOP (Rules of Hooks)
+  // Early returns happen AFTER all hooks have been called.
+  // ====================================================================
+
   // Initialize app
   useAppInitialization();
 
-  // Get auth state
+  // Get auth & error state
   const { authUser, loading: authLoading, isResetPasswordPage } = useAuth();
   const { error: appError, isDatabaseError } = useAppError();
 
-  // Get UI actions
+  // UI state & actions
   const { setView, setIsFormOpen, setEmployeeToEdit, setIsDetailOpen, setEmployeeToView, setIsChangePasswordOpen, setSearchTerm, setEssDefaultTab } = useUIActions();
   const { isChangePasswordOpen, isLoggingOut } = useUI();
 
-  // Get shell state (portal, view routing, data organization)
+  // Shell state (portal/view/derived data)
   const [shellState, shellActions] = useAppShell();
   const { activePortal, effectiveView, isPersonalView, canAccessOperationalPortal, pendingRequestsCount, employeesWithDocuments, sortedAndFilteredEmployees } = shellState;
 
-  // Get all handlers from hooks
+  // All handlers
   const { handleLogin, handleLogout } = useAuthHandlers();
   const { handleSaveEmployee, handleDeleteEmployee } = useEmployeeCRUD();
   const { handleImportEmployees } = useEmployeeImport();
@@ -75,44 +83,41 @@ const App: React.FC = () => {
   const { handleUpdateSystemSettings } = useSystemSettingsHandler();
   const { successMessage, clearError, clearSuccess } = useMessageHandlers();
 
-  // Get data
+  // Data
   const { employees, workUnits, departments, positions, systemSettings, attendanceRecords, allRequests, documents, dataLoading } = useAppData();
 
-  // Get UI state
+  // UI state for forms/modals
   const { isFormOpen, employeeToEdit, isDetailOpen, employeeToView, searchTerm, sortKey, sortDirection, essDefaultTab } = useUI();
 
-  // Render content
-  const lazyFallback = <LoadingSpinner fullScreen size="large" text="Memuat modul aplikasi..." />;
+  // ====================================================================
+  // EARLY RETURNS (after all hooks are called)
+  // ====================================================================
 
-  // Show loading state
   if (authLoading) {
     return <LoadingSpinner fullScreen size="large" text="Memeriksa sesi..." />;
   }
 
-  // Show reset password page
   if (isResetPasswordPage) {
     return (
-      <Suspense fallback={lazyFallback}>
+      <Suspense fallback={<LoadingSpinner fullScreen size="large" text="Memuat modul aplikasi..." />}>
         <ResetPassword />
       </Suspense>
     );
   }
 
-  // Show login if not authenticated
   if (!authUser) {
     return <Login onLogin={handleLogin} initialError={appError} />;
   }
 
-  // Show database setup if error
   if (isDatabaseError) {
     return (
-      <Suspense fallback={lazyFallback}>
+      <Suspense fallback={<LoadingSpinner fullScreen size="large" text="Memuat modul aplikasi..." />}>
         <DatabaseSetup />
       </Suspense>
     );
   }
 
-  // Mencegah Stale State (Flashing halaman operational jika user tidak punya akses)
+  // Check portal access
   if (activePortal === 'operational' && !canAccessOperationalPortal) {
     return <LoadingSpinner fullScreen size="large" text="Menyesuaikan profil akses..." />;
   }
@@ -127,6 +132,9 @@ const App: React.FC = () => {
       />
     );
   }
+
+  // Render content
+  const lazyFallback = <LoadingSpinner fullScreen size="large" text="Memuat modul aplikasi..." />;
 
   // Render the appropriate view
   const viewContent = renderViewContent({
@@ -279,7 +287,7 @@ const App: React.FC = () => {
         </main>
       </div>
 
-      {/* Fixed toast notifications — always above modals */}
+      {/* Fixed toast notifications */}
       {(successMessage || appError) && (
         <div className="fixed top-4 right-4 z-[9999] flex flex-col gap-2 max-w-sm w-full pointer-events-none">
           {successMessage && (
@@ -288,7 +296,13 @@ const App: React.FC = () => {
                 <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
               </svg>
               <p className="text-sm font-medium flex-1">{successMessage}</p>
-              <button onClick={() => clearSuccess()} className="text-white/80 hover:text-white">
+              <button
+                type="button"
+                onClick={() => clearSuccess()}
+                className="text-white/80 hover:text-white"
+                title="Tutup notifikasi sukses"
+                aria-label="Tutup notifikasi sukses"
+              >
                 <svg className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" /></svg>
               </button>
             </div>
@@ -299,7 +313,13 @@ const App: React.FC = () => {
                 <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm-1-5a1 1 0 012 0v1a1 1 0 01-2 0v-1zm0-4a1 1 0 012 0v3a1 1 0 01-2 0V9z" clipRule="evenodd" />
               </svg>
               <p className="text-sm font-medium flex-1">{appError}</p>
-              <button onClick={() => clearError()} className="text-white/80 hover:text-white">
+              <button
+                type="button"
+                onClick={() => clearError()}
+                className="text-white/80 hover:text-white"
+                title="Tutup notifikasi error"
+                aria-label="Tutup notifikasi error"
+              >
                 <svg className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" /></svg>
               </button>
             </div>
@@ -310,13 +330,15 @@ const App: React.FC = () => {
   );
 };
 
-// Wrap with error boundary
-const AppWithErrorBoundary: React.FC = () => {
+/**
+ * Main App wrapper - Wraps content with error boundary to fix hook order violations
+ */
+const App: React.FC = () => {
   return (
     <ErrorBoundary>
-      <App />
+      <AppContent />
     </ErrorBoundary>
   );
 };
 
-export default AppWithErrorBoundary;
+export default App;

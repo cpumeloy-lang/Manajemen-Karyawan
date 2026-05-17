@@ -60,3 +60,28 @@ Catatan:
 
 - Untuk production/staging, gunakan Supabase hosted agar tidak tergantung IP laptop.
 - Mode lokal tetap bisa dipakai dengan `EXPO_PUBLIC_SUPABASE_URL=auto` (khusus development lokal, bukan deployment online).
+
+## Build APK Production Signed
+
+Untuk APK yang benar-benar ditandatangani production, jangan pakai debug keystore.
+Set signing di file `~/.gradle/gradle.properties` pada Windows biasanya berada di `C:\Users\<username>\.gradle\gradle.properties`:
+
+```properties
+HRMS_RELEASE_STORE_FILE=C:\Users\<username>\keys\hrms-release.keystore
+HRMS_RELEASE_STORE_PASSWORD=isi_password_keystore
+HRMS_RELEASE_KEY_ALIAS=hrms-key
+HRMS_RELEASE_KEY_PASSWORD=isi_password_key
+```
+
+Jika ingin, path `HRMS_RELEASE_STORE_FILE` juga bisa relatif terhadap folder `mobile-absensi/android/app`.
+
+Lalu build release APK:
+
+```bash
+npm run build:android:release
+```
+
+Catatan penting:
+
+- Release build akan gagal cepat bila signing belum diisi, supaya tidak ada APK production yang diam-diam memakai debug keystore.
+- Setelah build jadi, uji APK di device fisik sebelum disebar ke user.

@@ -618,9 +618,20 @@ export const useAttendanceHandlers = () => {
         };
       });
 
-      const { error } = await supabase.from('attendance_change_requests').insert(payloads);
-      if (error) {
-        showError('Gagal membuat bulk correction request', error);
+      const { data } = await supabase.auth.getSession();
+      const token = data.session?.access_token;
+      const response = await fetch('/api/attendance-change-requests/bulk', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ payloads }),
+      });
+
+      const result = await response.json().catch(() => null);
+      if (!response.ok) {
+        showError('Gagal membuat bulk correction request', result?.error || 'Request gagal');
         return false;
       }
 

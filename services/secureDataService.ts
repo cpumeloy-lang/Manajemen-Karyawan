@@ -210,6 +210,16 @@ class SecureDataService {
       // Log RBAC action
       console.log(`✅ [RBAC] User ${userContext.email} created employee:`, data.id);
 
+      // Invalidate related caches
+      try {
+        const { getCache } = await import('./redisCache');
+        const cache = getCache();
+        await cache.invalidatePattern('employees:*');
+        if (data && data.id) await cache.invalidateUser(data.id);
+      } catch (err) {
+        console.warn('Cache invalidation failed after createEmployeeSecure', err);
+      }
+
       return {
         success: true,
         data,
@@ -306,6 +316,16 @@ class SecureDataService {
 
       console.log(`✅ [RBAC] User ${userContext.email} updated employee:`, employeeId);
 
+      // Invalidate related caches
+      try {
+        const { getCache } = await import('./redisCache');
+        const cache = getCache();
+        await cache.invalidatePattern('employees:*');
+        await cache.invalidateUser(employeeId);
+      } catch (err) {
+        console.warn('Cache invalidation failed after updateEmployeeSecure', err);
+      }
+
       return {
         success: true,
         data,
@@ -380,6 +400,16 @@ class SecureDataService {
       }
 
       console.log(`✅ [RBAC] User ${userContext.email} deleted employee:`, employeeId);
+
+      // Invalidate related caches
+      try {
+        const { getCache } = await import('./redisCache');
+        const cache = getCache();
+        await cache.invalidatePattern('employees:*');
+        await cache.invalidateUser(employeeId);
+      } catch (err) {
+        console.warn('Cache invalidation failed after deleteEmployeeSecure', err);
+      }
 
       return {
         success: true,

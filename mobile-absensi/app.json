@@ -24,6 +24,18 @@
       ],
       "expo-secure-store"
     ],
+    "_pluginsForRebuild_NOTE": "vision-camera (ESM bug) + fast-tflite (nitro-modules butuh RN 0.76+) disabled. Semua punya fallback graceful.",
+    "_pluginsForRebuild": [
+      "react-native-fast-tflite",
+      [
+        "react-native-vision-camera",
+        {
+          "cameraPermissionText": "Aplikasi membutuhkan kamera untuk verifikasi wajah saat absensi.",
+          "enableMicrophonePermission": false,
+          "enableFrameProcessors": true
+        }
+      ]
+    ],
     "android": {
       "package": "com.hrmsabsensi.mobile",
       "versionCode": 1,
@@ -56,8 +68,8 @@
       "bundler": "metro"
     },
     "extra": {
-      "privacyPolicyUrl": "https://your-domain.com/privacy",
-      "supportEmail": "support@your-domain.com"
+      "privacyPolicyUrl": "https://hrms.example.com/privacy",
+      "supportEmail": "support@hrms.example.com"
     }
   }
 }

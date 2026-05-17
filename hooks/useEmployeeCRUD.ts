@@ -1,6 +1,5 @@
 import { useCallback } from 'react';
 import { supabase } from '../services/supabaseClient';
-import { createClient } from '@supabase/supabase-js';
 import { Employee } from '../types';
 import type { NewEmployeeData } from '../components/EmployeeForm';
 import { useAppData, useAppDataActions, useUIActions, useAuth, useUI } from '../stores/appStore';
@@ -19,6 +18,12 @@ export const useEmployeeCRUD = () => {
   const { setEmployees, setDocuments } = useAppDataActions();
   const { setIsFormOpen, setEmployeeToEdit } = useUIActions();
   const { showSuccess, showError } = useMessageHandlers();
+
+  const getAuthHeaders = async () => {
+    const { data } = await supabase.auth.getSession();
+    const token = data.session?.access_token;
+    return token ? { Authorization: `Bearer ${token}` } : {};
+  };
 
   const ensureCanManageEmployeeData = (actionLabel: string): boolean => {
     const portalError = ensurePortalAccess(activePortal, 'operational', actionLabel);
@@ -93,16 +98,23 @@ export const useEmployeeCRUD = () => {
     console.log('[updateEmployee] Sending update for ID:', id);
     console.log('[updateEmployee] Payload keys:', Object.keys(updateData));
 
-    const { data: updatedEmployee, error } = await supabase
-      .from('employees')
-      .update(updateData)
-      .eq('id', id)
-      .select()
-      .single();
+    const authHeaders = await getAuthHeaders();
+    const response = await fetch(`/api/employees/${id}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        ...authHeaders,
+      },
+      body: JSON.stringify({ updateData }),
+    });
 
-    if (error) throw new Error(`Database error: ${error.message}`);
+    const result = await response.json().catch(() => null);
+    if (!response.ok) {
+      throw new Error(result?.error || 'Database error');
+    }
 
-    // Cek apakah baris benar-benar di-update (bisa null jika RLS memblokir tanpa error)
+    const updatedEmployee = result?.data;
+
     if (!updatedEmployee) {
       throw new Error(
         'Pembaruan data gagal: tidak ada baris yang diperbarui. ' +
@@ -154,50 +166,34 @@ export const useEmployeeCRUD = () => {
       throw new Error('Password akun login karyawan wajib diisi.');
     }
 
-    // Create a temporary client that doesn't persist the session
-    // This prevents the HR from being logged out when creating a new user
-    const tempSupabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
-    const tempSupabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
-
-    if (!tempSupabaseUrl || !tempSupabaseKey) {
-      throw new Error('Konfigurasi Supabase belum lengkap. Isi VITE_SUPABASE_URL dan VITE_SUPABASE_ANON_KEY untuk melanjutkan.');
-    }
-    
-    const tempClient = createClient(tempSupabaseUrl, tempSupabaseKey, {
-      auth: {
-        persistSession: false,
-        autoRefreshToken: false,
-      }
-    });
-
-    // Create auth account
-    const { data: authData, error: authError } = await tempClient.auth.signUp({
-      email: employeeData.email,
-      password: employeeData.password,
-    });
-
-    if (authError) {
-      throw new Error(`Gagal membuat akun login: ${authError.message}`);
-    }
-    if (!authData.user) {
-      throw new Error('Pengguna tidak berhasil dibuat di Supabase Auth.');
-    }
-
     // Create employee profile
     const sanitized = sanitizeDateFields({
       ...employeeData,
-      user_id: authData.user.id,
     });
     const profileData = mapEmployeeToDatabase(sanitized);
 
-    const { data: newEmployee, error: profileError } = await supabase
-      .from('employees')
-      .insert(profileData)
-      .select()
-      .single();
+    const authHeaders = await getAuthHeaders();
+    const response = await fetch('/api/employees', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...authHeaders,
+      },
+      body: JSON.stringify({
+        employeeData: profileData,
+        password: employeeData.password,
+        documents,
+      }),
+    });
 
-    if (profileError) {
-      throw new Error(`Gagal menyimpan profil karyawan: ${profileError.message}`);
+    const result = await response.json().catch(() => null);
+    if (!response.ok) {
+      throw new Error(result?.error || 'Gagal menyimpan profil karyawan');
+    }
+
+    const newEmployee = result?.data;
+    if (!newEmployee) {
+      throw new Error('Pengguna tidak berhasil dibuat di server.');
     }
 
     // Transform to UI format
@@ -214,20 +210,6 @@ export const useEmployeeCRUD = () => {
 
     // Handle documents
     if (documents.length > 0) {
-      const docsToInsert = documents.map((doc) => ({
-        ...doc,
-        employeeId: newEmployee.id,
-      }));
-      const { error: docError } = await supabase
-        .from('documents')
-        .insert(docsToInsert);
-
-      if (docError) {
-        throw new Error(
-          `Profil dibuat, tapi gagal menyimpan dokumen: ${docError.message}`
-        );
-      }
-
       // Reload documents
       await reloadDocuments();
     }
@@ -258,14 +240,27 @@ export const useEmployeeCRUD = () => {
     const sanitized = sanitizeDateFields(employeeData);
     const profileData = mapEmployeeToDatabase(sanitized);
 
-    const { data: newEmployee, error: profileError } = await supabase
-      .from('employees')
-      .insert(profileData)
-      .select()
-      .single();
+    const authHeaders = await getAuthHeaders();
+    const response = await fetch('/api/employees', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...authHeaders,
+      },
+      body: JSON.stringify({
+        employeeData: profileData,
+        documents,
+      }),
+    });
 
-    if (profileError) {
-      throw new Error(`Gagal menyimpan profil karyawan: ${profileError.message}`);
+    const result = await response.json().catch(() => null);
+    if (!response.ok) {
+      throw new Error(result?.error || `Gagal menyimpan profil karyawan`);
+    }
+
+    const newEmployee = result?.data;
+    if (!newEmployee) {
+      throw new Error('Profil karyawan tidak berhasil dibuat di server.');
     }
 
     const employeeWithCompensation = mapEmployeeFromDatabase({
@@ -279,20 +274,6 @@ export const useEmployeeCRUD = () => {
     setEmployees((prev) => [...prev, employeeWithCompensation]);
 
     if (documents.length > 0) {
-      const docsToInsert = documents.map((doc) => ({
-        ...doc,
-        employeeId: newEmployee.id,
-      }));
-      const { error: docError } = await supabase
-        .from('documents')
-        .insert(docsToInsert);
-
-      if (docError) {
-        throw new Error(
-          `Profil dibuat, tapi gagal menyimpan dokumen: ${docError.message}`
-        );
-      }
-
       await reloadDocuments();
     }
 
@@ -314,6 +295,17 @@ export const useEmployeeCRUD = () => {
     });
 
     return newEmployee;
+    // Trigger server-side cache invalidation (best-effort)
+    try {
+      const key = import.meta.env.VITE_INTERNAL_API_KEY || '';
+      fetch('/api/cache/invalidate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(key ? { 'x-internal-auth': key } : {}) },
+        body: JSON.stringify({ pattern: 'employees:*', userId: newEmployee.id }),
+      }).catch(() => {});
+    } catch (err) {
+      // ignore
+    }
   };
 
   const handleDocumentUpdate = async (
@@ -376,9 +368,16 @@ export const useEmployeeCRUD = () => {
       }
 
       try {
-        const { error } = await supabase.from('employees').delete().eq('id', id);
+        const authHeaders = await getAuthHeaders();
+        const response = await fetch(`/api/employees/${id}`, {
+          method: 'DELETE',
+          headers: {
+            ...authHeaders,
+          },
+        });
 
-        if (error) throw error;
+        const result = await response.json().catch(() => null);
+        if (!response.ok) throw new Error(result?.error || 'Gagal menghapus karyawan');
 
         setEmployees((prev) => prev.filter((e) => e.id !== id));
         setDocuments((prev) => prev.filter((d) => d.employeeId !== id));

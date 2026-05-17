@@ -1,6 +1,7 @@
 import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../config/supabase';
+import { logMobileAudit } from './auditService';
 import type { MobileUser } from '../types';
 
 const STORAGE_KEY_DEVICE_ID = 'hrms_mobile_device_id';
@@ -120,11 +121,22 @@ export const deviceService = {
 
     const { error } = await supabase
       .from('employee_devices')
-      .upsert(payload, { onConflict: ['employee_id', 'device_id'] });
+      .upsert(payload, { onConflict: 'employee_id,device_id' });
 
     if (error) {
       throw new Error(`Gagal mendaftarkan device: ${error.message}`);
     }
+
+    void logMobileAudit({
+      user,
+      action: 'DEVICE_REGISTER',
+      entityName: deviceInfo.deviceName,
+      metadata: {
+        deviceId: deviceInfo.deviceId,
+        platform: deviceInfo.platform,
+        fingerprint: deviceInfo.deviceFingerprint,
+      },
+    });
 
     return deviceInfo;
   },

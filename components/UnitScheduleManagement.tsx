@@ -272,7 +272,21 @@ const UnitScheduleManagement: React.FC<UnitScheduleManagementProps> = ({ kepalaR
     const saveShiftConfig = async () => {
         try {
             setSavingConfig(true);
-            await (supabase.from('units') as any).update({ shifts: unitShifts }).eq('id', managedUnitId!);
+            const { data } = await supabase.auth.getSession();
+            const token = data.session?.access_token;
+            const response = await fetch(`/api/organization/units`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+                },
+                body: JSON.stringify({ unit: { id: managedUnitId!, nama: workUnit?.nama || '', shifts: unitShifts } }),
+            });
+
+            const result = await response.json().catch(() => null);
+            if (!response.ok) {
+                throw new Error(result?.error || 'Gagal menyimpan konfigurasi shift unit');
+            }
 
             // Audit log perubahan konfigurasi shift
             void createAuditLog({

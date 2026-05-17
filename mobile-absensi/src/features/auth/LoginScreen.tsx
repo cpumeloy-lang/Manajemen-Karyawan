@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
-import { StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { AppButton } from '../../components/AppButton';
 import { AppCard } from '../../components/AppCard';
 import { Screen } from '../../components/Screen';
+import { authService } from '../../services/authService';
 import { colors } from '../../theme/colors';
 
 interface LoginScreenProps {
@@ -12,7 +13,9 @@ interface LoginScreenProps {
 export function LoginScreen({ onLogin }: LoginScreenProps) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [resetting, setResetting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const isEmailValid = (value: string) => /.+@.+\..+/.test(value.trim());
@@ -46,6 +49,32 @@ export function LoginScreen({ onLogin }: LoginScreenProps) {
     }
   };
 
+  const handleForgotPassword = async () => {
+    const normalizedEmail = email.trim();
+    if (!normalizedEmail) {
+      setError('Isi dulu email Anda untuk reset password.');
+      return;
+    }
+    if (!isEmailValid(normalizedEmail)) {
+      setError('Format email tidak valid.');
+      return;
+    }
+
+    setResetting(true);
+    setError(null);
+    try {
+      await authService.requestPasswordReset(normalizedEmail);
+      Alert.alert(
+        'Email reset terkirim',
+        `Kami telah mengirim link reset password ke ${normalizedEmail}. Silakan cek inbox/spam.`
+      );
+    } catch (err: any) {
+      setError(err?.message || 'Gagal mengirim email reset.');
+    } finally {
+      setResetting(false);
+    }
+  };
+
   return (
     <Screen>
       <View style={styles.hero}>
@@ -64,16 +93,37 @@ export function LoginScreen({ onLogin }: LoginScreenProps) {
           autoComplete="email"
           style={styles.input}
         />
-        <TextInput
-          value={password}
-          onChangeText={setPassword}
-          placeholder="Password"
-          secureTextEntry
-          autoComplete="password"
-          style={styles.input}
-        />
+        <View style={styles.passwordWrap}>
+          <TextInput
+            value={password}
+            onChangeText={setPassword}
+            placeholder="Password"
+            secureTextEntry={!showPassword}
+            autoComplete="password"
+            style={[styles.input, styles.passwordInput]}
+          />
+          <Pressable
+            onPress={() => setShowPassword((v) => !v)}
+            style={styles.toggleBtn}
+            accessibilityRole="button"
+            accessibilityLabel={showPassword ? 'Sembunyikan password' : 'Tampilkan password'}
+            hitSlop={8}
+          >
+            <Text style={styles.toggleText}>{showPassword ? 'Sembunyikan' : 'Tampilkan'}</Text>
+          </Pressable>
+        </View>
         {error ? <Text style={styles.error}>{error}</Text> : null}
         <AppButton title="Masuk" onPress={submit} loading={loading} />
+        <Pressable
+          onPress={handleForgotPassword}
+          disabled={resetting}
+          style={styles.forgotWrap}
+          accessibilityRole="button"
+        >
+          <Text style={styles.forgotText}>
+            {resetting ? 'Mengirim email reset...' : 'Lupa password?'}
+          </Text>
+        </Pressable>
       </AppCard>
     </Screen>
   );
@@ -120,5 +170,34 @@ const styles = StyleSheet.create({
     color: colors.danger,
     fontSize: 14,
     marginBottom: 12,
+  },
+  passwordWrap: {
+    position: 'relative',
+    justifyContent: 'center',
+  },
+  passwordInput: {
+    paddingRight: 96,
+  },
+  toggleBtn: {
+    position: 'absolute',
+    right: 14,
+    top: 0,
+    bottom: 14,
+    justifyContent: 'center',
+    paddingHorizontal: 4,
+  },
+  toggleText: {
+    color: colors.primary,
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  forgotWrap: {
+    marginTop: 14,
+    alignItems: 'center',
+  },
+  forgotText: {
+    color: colors.primary,
+    fontSize: 14,
+    fontWeight: '600',
   },
 });

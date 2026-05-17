@@ -15,6 +15,12 @@ export const useOrganizationHandlers = () => {
   const { setWorkUnits, setDepartments, setPositions, setEmployees } = useAppDataActions();
   const { showSuccess, showError } = useMessageHandlers();
 
+  const getAuthHeaders = async () => {
+    const { data } = await supabase.auth.getSession();
+    const token = data.session?.access_token;
+    return token ? { Authorization: `Bearer ${token}` } : {};
+  };
+
   const ensureCanManageMasterData = (actionLabel: string): boolean => {
     const portalError = ensurePortalAccess(activePortal, 'operational', actionLabel);
     if (portalError) {
@@ -35,29 +41,21 @@ export const useOrganizationHandlers = () => {
       if (!ensureCanManageMasterData('Kelola unit kerja')) return;
 
       try {
-        let savedUnit: WorkUnit | null = null;
         const isCreate = !unit.id;
+        const authHeaders = await getAuthHeaders();
+        const response = await fetch('/api/organization/units', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...authHeaders,
+          },
+          body: JSON.stringify({ unit }),
+        });
 
-        if (unit.id) {
-          const { data, error } = await supabase
-            .from('units')
-            .update({ nama: unit.nama })
-            .eq('id', unit.id)
-            .select()
-            .single();
+        const result = await response.json().catch(() => null);
+        if (!response.ok) throw new Error(result?.error || 'Gagal menyimpan unit kerja');
 
-          if (error) throw error;
-          savedUnit = data as unknown as WorkUnit;
-        } else {
-          const { data, error } = await supabase
-            .from('units')
-            .insert({ nama: unit.nama })
-            .select()
-            .single();
-
-          if (error) throw error;
-          savedUnit = data as unknown as WorkUnit;
-        }
+        const savedUnit = result?.data as WorkUnit;
 
         if (savedUnit) {
           setWorkUnits((prev) => {
@@ -101,9 +99,15 @@ export const useOrganizationHandlers = () => {
       }
 
       try {
-        const { error } = await supabase.from('units').delete().eq('id', id);
-
-        if (error) throw error;
+        const authHeaders = await getAuthHeaders();
+        const response = await fetch(`/api/organization/units/${id}`, {
+          method: 'DELETE',
+          headers: {
+            ...authHeaders,
+          },
+        });
+        const result = await response.json().catch(() => null);
+        if (!response.ok) throw new Error(result?.error || 'Gagal menghapus unit kerja');
 
         setWorkUnits((prev) => prev.filter((u) => u.id !== id));
         setEmployees((prev) =>
@@ -134,29 +138,21 @@ export const useOrganizationHandlers = () => {
       if (!ensureCanManageMasterData('Kelola departemen')) return;
 
       try {
-        let savedDept: Department | null = null;
         const isCreate = !dept.id;
+        const authHeaders = await getAuthHeaders();
+        const response = await fetch('/api/organization/departments', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...authHeaders,
+          },
+          body: JSON.stringify({ department: dept }),
+        });
 
-        if (dept.id) {
-          const { data, error } = await supabase
-            .from('departments')
-            .update({ nama: dept.nama })
-            .eq('id', dept.id)
-            .select()
-            .single();
+        const result = await response.json().catch(() => null);
+        if (!response.ok) throw new Error(result?.error || 'Gagal menyimpan departemen');
 
-          if (error) throw error;
-          savedDept = data;
-        } else {
-          const { data, error } = await supabase
-            .from('departments')
-            .insert({ nama: dept.nama })
-            .select()
-            .single();
-
-          if (error) throw error;
-          savedDept = data;
-        }
+        const savedDept = result?.data as Department;
 
         if (savedDept) {
           setDepartments((prev) => {
@@ -200,9 +196,15 @@ export const useOrganizationHandlers = () => {
       }
 
       try {
-        const { error } = await supabase.from('departments').delete().eq('id', id);
-
-        if (error) throw error;
+        const authHeaders = await getAuthHeaders();
+        const response = await fetch(`/api/organization/departments/${id}`, {
+          method: 'DELETE',
+          headers: {
+            ...authHeaders,
+          },
+        });
+        const result = await response.json().catch(() => null);
+        if (!response.ok) throw new Error(result?.error || 'Gagal menghapus departemen');
 
         const deptName = departments.find((d) => d.id === id)?.nama;
         setDepartments((prev) => prev.filter((d) => d.id !== id));
@@ -234,29 +236,21 @@ export const useOrganizationHandlers = () => {
       if (!ensureCanManageMasterData('Kelola jabatan')) return;
 
       try {
-        let savedPos: Position | null = null;
         const isCreate = !position.id;
+        const authHeaders = await getAuthHeaders();
+        const response = await fetch('/api/organization/positions', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...authHeaders,
+          },
+          body: JSON.stringify({ position }),
+        });
 
-        if (position.id) {
-          const { data, error } = await supabase
-            .from('positions')
-            .update({ nama: position.nama })
-            .eq('id', position.id)
-            .select()
-            .single();
+        const result = await response.json().catch(() => null);
+        if (!response.ok) throw new Error(result?.error || 'Gagal menyimpan jabatan');
 
-          if (error) throw error;
-          savedPos = data;
-        } else {
-          const { data, error } = await supabase
-            .from('positions')
-            .insert({ nama: position.nama })
-            .select()
-            .single();
-
-          if (error) throw error;
-          savedPos = data;
-        }
+        const savedPos = result?.data as Position;
 
         if (savedPos) {
           setPositions((prev) => {
@@ -300,9 +294,15 @@ export const useOrganizationHandlers = () => {
       }
 
       try {
-        const { error } = await supabase.from('positions').delete().eq('id', id);
-
-        if (error) throw error;
+        const authHeaders = await getAuthHeaders();
+        const response = await fetch(`/api/organization/positions/${id}`, {
+          method: 'DELETE',
+          headers: {
+            ...authHeaders,
+          },
+        });
+        const result = await response.json().catch(() => null);
+        if (!response.ok) throw new Error(result?.error || 'Gagal menghapus jabatan');
 
         const posName = positions.find((p) => p.id === id)?.nama;
         setPositions((prev) => prev.filter((p) => p.id !== id));

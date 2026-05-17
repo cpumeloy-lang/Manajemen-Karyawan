@@ -26,7 +26,7 @@ jobs:
         run: npm ci
 
       - name: Run tests
-        run: npx vitest run
+        run: npx vitest run --coverage
 
       - name: Type check
         run: npx tsc --noEmit
@@ -43,6 +43,12 @@ jobs:
         with:
           name: web-dist
           path: dist/
+          retention-days: 7
+      - name: Upload coverage
+        uses: actions/upload-artifact@v4
+        with:
+          name: vitest-coverage
+          path: coverage/
           retention-days: 7
 
   mobile:

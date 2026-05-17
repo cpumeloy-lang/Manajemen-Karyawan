@@ -10,12 +10,6 @@ interface AppCardProps {
 
 export function AppCard({ title, children, style }: AppCardProps) {
   return (
-    <View style={[styles.card, style]
-  style?: ViewStyle;
-}
-
-export function AppCard({ title, children, style }: AppCardProps) {
-  return (
     <View style={[styles.card, style]}>
       {title ? <Text style={styles.title}>{title}</Text> : null}
       {children}

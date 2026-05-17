@@ -236,12 +236,12 @@ export class HealthCheckService {
     const startTime = performance.now();
 
     try {
-      // Import Redis cache dynamically
-      const RedisCache = (await import('./redisCache')).default;
-      const redisCache = new RedisCache(this.getRedisConfig());
+      // Use centralized Redis cache singleton
+      const { getCache } = await import('./redisCache');
+      const cache = getCache();
 
       // Simple ping to check Redis connectivity
-      const isConnected = await redisCache.ping();
+      const isConnected = await cache.ping();
 
       const responseTime = performance.now() - startTime;
 
@@ -256,7 +256,14 @@ export class HealthCheckService {
       }
 
       // Get Redis stats
-      const stats = await redisCache.getStats();
+      const info = await cache.info();
+      const stats = info ? {
+        connected_clients: info.connected_clients,
+        used_memory: info.used_memory,
+        total_connections_received: info.total_connections_received,
+        keyspace_hits: info.keyspace_hits,
+        keyspace_misses: info.keyspace_misses
+      } : null;
 
       return {
         redis: {

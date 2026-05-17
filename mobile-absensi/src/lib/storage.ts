@@ -8,7 +8,16 @@ if (Platform.OS !== 'web') {
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     SecureStore = require('expo-secure-store');
   } catch {
-    console.warn('[storage] expo-secure-store not installed. Sensitive data will fall back to AsyncStorage. Run: npx expo install expo-secure-store');
+    if (!__DEV__) {
+      // Production: tidak boleh menyimpan token sesi di AsyncStorage plaintext.
+      // Throw saat startup agar kesalahan build/dependency segera terlihat.
+      throw new Error(
+        '[storage] expo-secure-store tidak tersedia di build produksi. ' +
+          'Jalankan `npx expo install expo-secure-store` lalu rebuild.'
+      );
+    }
+    // Dev fallback: tetap jalan agar smoke test bisa lanjut, tanpa spam warning.
+    SecureStore = null;
   }
 }
 

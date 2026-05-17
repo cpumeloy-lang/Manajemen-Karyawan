@@ -15,7 +15,7 @@ if (configuredAuthUrl && configuredAuthUrl.includes('<IP_KOMPUTER_SERVER>')) {
 }
 
 const authSupabaseUrl =
-  configuredAuthUrl.toLowerCase() === 'auto'
+  (!configuredAuthUrl || configuredAuthUrl.toLowerCase() === 'auto')
     ? `${window.location.protocol}//${window.location.hostname}:54321`
     : configuredAuthUrl;
 

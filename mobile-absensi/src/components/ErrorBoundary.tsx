@@ -1,6 +1,7 @@
 import React from 'react';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { colors } from '../theme/colors';
+import { captureException } from '../services/errorReportingService';
 
 interface Props {
   children: React.ReactNode;
@@ -22,8 +23,11 @@ export class ErrorBoundary extends React.Component<Props, State> {
   }
 
   componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
-    // TODO: Send to Sentry / Bugsnag in production
     console.error('[ErrorBoundary]', error, errorInfo.componentStack);
+    captureException(error, {
+      componentStack: errorInfo.componentStack,
+      source: 'ErrorBoundary',
+    });
   }
 
   handleReset = () => {

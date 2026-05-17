@@ -773,7 +773,7 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ isOpen, onClose, onSave, em
                                             <label className="block text-sm font-medium text-gray-700 mb-2">Role</label>
                                             <select 
                                                 name="role" 
-                                                value={employee.role} 
+                                                value={employee.role || 'karyawan'} 
                                                 onChange={handleChange} 
                                                 className="mt-1 block w-full border-gray-300 rounded-lg shadow-sm focus:ring-[#06736a] focus:border-[#06736a] p-3"
                                                 title="Pilih role pengguna"

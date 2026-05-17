@@ -1,4 +1,12 @@
-export type AttendanceTab = 'dashboard' | 'attendance' | 'history' | 'profile' | 'device';
+export type AttendanceTab =
+  | 'dashboard'
+  | 'attendance'
+  | 'schedule'
+  | 'history'
+  | 'requests'
+  | 'profile'
+  | 'device'
+  | 'face';
 
 export type BiometricType = 'face' | 'fingerprint' | 'iris' | 'code' | 'totp' | 'manual';
 
@@ -28,6 +36,9 @@ export interface MobileUser {
   unitName?: string;
   shift?: string;
   status?: string;
+  sisaCuti?: number;
+  telepon?: string;
+  foto?: string;
 }
 
 export interface AttendanceRecord {

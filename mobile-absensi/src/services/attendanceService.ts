@@ -30,6 +30,39 @@ const mapAttendanceRow = (row: any): AttendanceRecord => ({
   faceVerificationCheckOut: row.faceVerificationCheckOut || row.face_verification_check_out || undefined,
 });
 
+/**
+ * Ekstrak nama kolom yang missing dari pesan PostgREST.
+ * Format umum: "Could not find the 'colname' column of 'attendance' in the schema cache".
+ * Mengembalikan null jika tidak match.
+ */
+const extractMissingColumn = (message: string): string | null => {
+  const m = String(message || '').match(
+    /Could not find the ['"]([^'"]+)['"] column/i
+  );
+  return m ? m[1] : null;
+};
+
+/**
+ * Eksekusi operasi DB dengan auto-strip kolom missing.
+ * `op(payload)` dipanggil ulang setelah membuang key yang DB tidak punya, max 8 kali.
+ * Aman untuk skema lama yang belum punya kolom biometric/device/face.
+ */
+async function executeWithColumnFallback<T>(
+  payload: Record<string, any>,
+  op: (p: Record<string, any>) => Promise<{ data: T | null; error: any }>,
+  maxRetries = 8
+): Promise<{ data: T | null; error: any }> {
+  let p = { ...payload };
+  for (let i = 0; i < maxRetries; i++) {
+    const result = await op(p);
+    if (!result.error) return result;
+    const missing = extractMissingColumn(result.error.message);
+    if (!missing || !(missing in p)) return result;
+    delete p[missing];
+  }
+  return await op(p);
+}
+
 const isSchemaError = (message: string) => {
   const normalized = String(message || '').toLowerCase();
   return normalized.includes('column') || normalized.includes('does not exist') || normalized.includes('relation');
@@ -91,19 +124,22 @@ const buildPayload = (
     ...flattenExtra(isSnakeCase, extra),
   };
 
+  // Postgres TIME column tidak menerima '' (empty string) → pakai null.
+  const clockOutValue = draft.clockOut && draft.clockOut.trim() !== '' ? draft.clockOut : null;
+
   return isSnakeCase
     ? {
         employee_id: user.id,
         date: draft.tanggal,
         check_in: draft.clockIn,
-        check_out: draft.clockOut || '',
+        check_out: clockOutValue,
         ...base,
       }
     : {
         employeeId: user.id,
         tanggal: draft.tanggal,
         clockIn: draft.clockIn,
-        clockOut: draft.clockOut || '',
+        clockOut: clockOutValue,
         ...base,
       };
 };
@@ -168,20 +204,26 @@ export const attendanceService = {
     draft: CheckInDraft,
     extra?: AttendancePayload
   ): Promise<AttendanceRecord> {
-    const insert = async (isSnakeCase: boolean) => {
+    const insert = (isSnakeCase: boolean) => async (p: Record<string, any>) => {
       const { data, error } = await supabase
         .from('attendance')
-        .upsert(buildPayload(user, draft, isSnakeCase, extra), {
-          onConflict: isSnakeCase ? ['employee_id', 'date'] : ['employeeId', 'tanggal'],
+        .upsert(p, {
+          onConflict: isSnakeCase ? 'employee_id,date' : 'employeeId,tanggal',
         })
         .select('*')
         .single();
       return { data, error };
     };
 
-    let result = await insert(false);
+    let result = await executeWithColumnFallback<any>(
+      buildPayload(user, draft, false, extra),
+      insert(false)
+    );
     if (result.error && isSchemaError(result.error.message)) {
-      result = await insert(true);
+      result = await executeWithColumnFallback<any>(
+        buildPayload(user, draft, true, extra),
+        insert(true)
+      );
     }
 
     if (result.error || !result.data) {
@@ -240,8 +282,8 @@ export const attendanceService = {
       ...extra,
     };
 
-    const update = async (isSnakeCase: boolean) => {
-      const updateFields: Record<string, any> = isSnakeCase
+    const buildUpdateFields = (isSnakeCase: boolean): Record<string, any> => {
+      const fields: Record<string, any> = isSnakeCase
         ? {
             check_out: payload.clockOut,
             status: payload.status,
@@ -256,36 +298,45 @@ export const attendanceService = {
           };
 
       if (payload.deviceId !== undefined) {
-        updateFields[isSnakeCase ? 'device_id' : 'deviceId'] = payload.deviceId;
+        fields[isSnakeCase ? 'device_id' : 'deviceId'] = payload.deviceId;
       }
       if (payload.biometricType !== undefined) {
-        updateFields[isSnakeCase ? 'biometric_type' : 'biometricType'] = payload.biometricType;
+        fields[isSnakeCase ? 'biometric_type' : 'biometricType'] = payload.biometricType;
       }
       if (payload.biometricVerified !== undefined) {
-        updateFields[isSnakeCase ? 'biometric_verified' : 'biometricVerified'] = payload.biometricVerified;
+        fields[isSnakeCase ? 'biometric_verified' : 'biometricVerified'] = payload.biometricVerified;
       }
       if (payload.faceMatchScoreCheckOut !== undefined) {
-        updateFields[isSnakeCase ? 'face_match_score_check_out' : 'faceMatchScoreCheckOut'] = payload.faceMatchScoreCheckOut;
+        fields[isSnakeCase ? 'face_match_score_check_out' : 'faceMatchScoreCheckOut'] = payload.faceMatchScoreCheckOut;
       }
       if (payload.source !== undefined) {
-        updateFields[isSnakeCase ? 'source' : 'source'] = payload.source;
+        fields.source = payload.source;
       }
       if (payload.notes !== undefined) {
-        updateFields[isSnakeCase ? 'notes' : 'notes'] = payload.notes;
+        fields.notes = payload.notes;
       }
+      return fields;
+    };
 
+    const runUpdate = (isSnakeCase: boolean) => async (p: Record<string, any>) => {
       return supabase
         .from('attendance')
-        .update(updateFields)
+        .update(p)
         .eq(isSnakeCase ? 'employee_id' : 'employeeId', user.id)
         .eq(isSnakeCase ? 'date' : 'tanggal', draft.tanggal)
         .select('*')
         .single();
     };
 
-    let result = await update(false);
+    let result = await executeWithColumnFallback<any>(
+      buildUpdateFields(false),
+      runUpdate(false)
+    );
     if (result.error && isSchemaError(result.error.message)) {
-      result = await update(true);
+      result = await executeWithColumnFallback<any>(
+        buildUpdateFields(true),
+        runUpdate(true)
+      );
     }
 
     if (result.error || !result.data) {
