@@ -3,6 +3,7 @@ import { Employee, Status, Shift, WorkUnit, Document, Compensation, Role, Depart
 import { generateJobDescription } from '../services/geminiService.ts';
 import { generateNIK, validateNIK, isNIKUnique } from '../services/nikService.ts';
 import { supabase } from '../services/supabaseClient.ts';
+import { classifyError } from '../services/errorHandlingService.ts';
 import LoadingSpinner from './LoadingSpinner.tsx';
 import { XMarkIcon, SparklesIcon, TrashIcon, PlusIcon } from './icons.tsx';
 
@@ -230,7 +231,7 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ isOpen, onClose, onSave, em
                 finalUrl = publicUrlData.publicUrl;
             } catch (error: any) {
                 console.error("Upload error:", error);
-                alert(`Gagal mengunggah file: ${error.message}`);
+                alert(`Gagal mengunggah file: ${classifyError(error).userMessage}`);
                 setIsUploadingDoc(false);
                 return;
             }
