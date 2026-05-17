@@ -54,7 +54,7 @@ const Login: React.FC<LoginProps> = ({ onLogin, initialError }) => {
     }, [initialError]);
 
     const getOAuthRedirectUrl = () => {
-        const configuredRedirectUrl = import.meta.env.VITE_OAUTH_REDIRECT_URL?.trim();
+        const configuredRedirectUrl = String(import.meta.env.VITE_OAUTH_REDIRECT_URL || '').trim();
         return configuredRedirectUrl && configuredRedirectUrl.length > 0
             ? configuredRedirectUrl
             : window.location.origin;

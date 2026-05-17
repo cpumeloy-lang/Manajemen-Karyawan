@@ -109,8 +109,9 @@ const ScheduleCalendarPanel: React.FC<ScheduleCalendarPanelProps> = ({
         return grid;
     }, [employees, schedules]);
 
-    const getShiftCellStyle = (shiftName: string): string => {
-        if (shiftName.toLowerCase() === 'libur') return 'bg-gray-50 text-gray-400 text-[9px]';
+    const getShiftCellStyle = (shiftName?: string | null): string => {
+        if (!shiftName) return 'bg-gray-100 text-gray-600 text-[9px]';
+        if (String(shiftName).toLowerCase() === 'libur') return 'bg-gray-50 text-gray-400 text-[9px]';
         const def = unitShifts.find(s => s.name === shiftName);
         return def ? `${COLOR_CLASSES[def.color]} text-[9px] font-semibold` : 'bg-gray-100 text-gray-600 text-[9px]';
     };

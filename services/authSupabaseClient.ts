@@ -8,18 +8,18 @@
 import { createClient } from '@supabase/supabase-js';
 import type { Database } from './database.types';
 
-let configuredAuthUrl = (import.meta.env.VITE_AUTH_SUPABASE_URL || import.meta.env.VITE_SUPABASE_URL)?.trim();
+let configuredAuthUrl = String(import.meta.env.VITE_AUTH_SUPABASE_URL || import.meta.env.VITE_SUPABASE_URL || '').trim();
 
 if (configuredAuthUrl && configuredAuthUrl.includes('<IP_KOMPUTER_SERVER>')) {
   configuredAuthUrl = configuredAuthUrl.replace('<IP_KOMPUTER_SERVER>', window.location.hostname);
 }
 
 const authSupabaseUrl =
-  (!configuredAuthUrl || configuredAuthUrl.toLowerCase() === 'auto')
+  (!configuredAuthUrl || String(configuredAuthUrl).toLowerCase() === 'auto')
     ? `${window.location.protocol}//${window.location.hostname}:54321`
     : configuredAuthUrl;
 
-const authSupabaseKey = (import.meta.env.VITE_AUTH_SUPABASE_ANON_KEY || import.meta.env.VITE_SUPABASE_ANON_KEY)?.trim();
+const authSupabaseKey = String(import.meta.env.VITE_AUTH_SUPABASE_ANON_KEY || import.meta.env.VITE_SUPABASE_ANON_KEY || '');
 
 
 if (!authSupabaseUrl || !authSupabaseKey) {

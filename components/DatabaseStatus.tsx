@@ -50,7 +50,7 @@ const DatabaseStatus: React.FC = () => {
 
     if (status === 'error') {
         // Deteksi jenis error untuk memberikan petunjuk yang lebih spesifik
-        const errorMessage = error.toLowerCase();
+        const errorMessage = String(error || '').toLowerCase();
         const isTableMissing = errorMessage.includes('relation') && errorMessage.includes('does not exist');
         const isAuthError = errorMessage.includes('auth') || errorMessage.includes('permission');
         const isConnectionRefused =

@@ -1,17 +1,17 @@
 import { authSupabase } from './authSupabaseClient';
 
 // Menggunakan variabel lingkungan untuk konfigurasi Supabase
-let configuredSupabaseUrl = import.meta.env.VITE_SUPABASE_URL?.trim();
+let configuredSupabaseUrl = String(import.meta.env.VITE_SUPABASE_URL || '').trim();
 
 if (configuredSupabaseUrl && configuredSupabaseUrl.includes('<IP_KOMPUTER_SERVER>')) {
   configuredSupabaseUrl = configuredSupabaseUrl.replace('<IP_KOMPUTER_SERVER>', window.location.hostname);
 }
 
 const supabaseUrl =
-  (!configuredSupabaseUrl || configuredSupabaseUrl.toLowerCase() === 'auto')
+  (!configuredSupabaseUrl || String(configuredSupabaseUrl).toLowerCase() === 'auto')
     ? `${window.location.protocol}//${window.location.hostname}:54321`
     : configuredSupabaseUrl;
-const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+const supabaseKey = String(import.meta.env.VITE_SUPABASE_ANON_KEY || '');
 
 // Validasi konfigurasi untuk mencegah error
 if (!supabaseUrl || !supabaseKey) {

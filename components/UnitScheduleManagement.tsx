@@ -217,7 +217,7 @@ const UnitScheduleManagement: React.FC<UnitScheduleManagementProps> = ({ kepalaR
 
     const addShift = () => {
         if (!newShiftForm.name.trim()) return;
-        if (unitShifts.some(s => s.name.toLowerCase() === newShiftForm.name.trim().toLowerCase())) {
+        if (unitShifts.some(s => String(s?.name || '').toLowerCase() === String(newShiftForm.name || '').trim().toLowerCase())) {
             showNotification('error', `Shift "${newShiftForm.name}" sudah ada.`);
             return;
         }
@@ -720,7 +720,7 @@ const UnitScheduleManagement: React.FC<UnitScheduleManagementProps> = ({ kepalaR
                     <div className="space-y-4">
                         {sortedGroups.map(([jabatan, emps]) => {
                             const relevantShifts = unitShifts.filter(
-                                s => !s.positionGroup || s.positionGroup.toLowerCase() === jabatan.toLowerCase()
+                                s => !s.positionGroup || String(s.positionGroup || '').toLowerCase() === String(jabatan || '').toLowerCase()
                             );
                             const shiftsToUse = relevantShifts.length > 0 ? relevantShifts : unitShifts;
                             const groupChanges = emps.filter(e => changedEmployeeIds.includes(e.id)).length;

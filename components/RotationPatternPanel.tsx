@@ -135,8 +135,9 @@ const RotationPatternPanel: React.FC<RotationPatternPanelProps> = ({ unitId, uni
         }
     };
 
-    const getShiftColor = (shiftName: string): string => {
-        if (shiftName.toLowerCase() === 'libur') return 'bg-gray-100 text-gray-500 border border-dashed border-gray-300';
+    const getShiftColor = (shiftName?: string | null): string => {
+        if (!shiftName) return 'bg-gray-200 text-gray-800';
+        if (String(shiftName).toLowerCase() === 'libur') return 'bg-gray-100 text-gray-500 border border-dashed border-gray-300';
         const def = unitShifts.find(s => s.name === shiftName);
         return def ? COLOR_CLASSES[def.color] : 'bg-gray-200 text-gray-800';
     };

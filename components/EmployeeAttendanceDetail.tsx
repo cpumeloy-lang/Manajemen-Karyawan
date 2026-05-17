@@ -246,7 +246,7 @@ const EmployeeAttendanceDetail: React.FC<EmployeeAttendanceDetailProps> = ({ emp
     };
 
     const exportAttendance = () => {
-        exportCsv(`attendance-personal-${employee.nama.replace(/\s+/g, '-').toLowerCase()}-${Date.now()}.csv`, filteredRecords.map((record) => ({
+        exportCsv(`attendance-personal-${String(employee?.nama || 'export').replace(/\s+/g, '-').toLowerCase()}-${Date.now()}.csv`, filteredRecords.map((record) => ({
             employee_name: employee.nama,
             employee_id: employee.id,
             tanggal: record.tanggal,
@@ -259,7 +259,7 @@ const EmployeeAttendanceDetail: React.FC<EmployeeAttendanceDetailProps> = ({ emp
     };
 
     const exportRevisionHistory = () => {
-        exportCsv(`attendance-revision-personal-${employee.nama.replace(/\s+/g, '-').toLowerCase()}-${Date.now()}.csv`, filteredRevisionHistory.map((item) => ({
+        exportCsv(`attendance-revision-personal-${String(employee?.nama || 'export').replace(/\s+/g, '-').toLowerCase()}-${Date.now()}.csv`, filteredRevisionHistory.map((item) => ({
             id: item.id,
             employee_name: employee.nama,
             employee_id: item.employee_id,

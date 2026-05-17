@@ -12,7 +12,7 @@ const ForgotPassword: React.FC<ForgotPasswordProps> = ({ isOpen, onClose }) => {
     const [message, setMessage] = useState('');
     const [error, setError] = useState('');
 
-    const configuredRedirectUrl = import.meta.env.VITE_PASSWORD_RESET_REDIRECT_URL?.trim();
+    const configuredRedirectUrl = String(import.meta.env.VITE_PASSWORD_RESET_REDIRECT_URL || '').trim();
     const redirectTo = configuredRedirectUrl && configuredRedirectUrl.length > 0
         ? configuredRedirectUrl
         : `${window.location.origin}`;

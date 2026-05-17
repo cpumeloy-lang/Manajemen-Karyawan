@@ -42,7 +42,7 @@ const setCachedUnavailable = (cacheKey: string, isUnavailable: boolean): void =>
 const isAttendanceWorkflowMissingError = (error: any, tableName: string): boolean => {
   const code = String(error?.code || '').toUpperCase();
   const message = String(error?.message || '').toLowerCase();
-  const normalizedTable = tableName.toLowerCase();
+  const normalizedTable = String(tableName || '').toLowerCase();
 
   return (
     code === 'PGRST205' ||
