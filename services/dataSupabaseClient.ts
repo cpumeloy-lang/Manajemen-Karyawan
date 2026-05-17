@@ -16,7 +16,7 @@ if (configuredDataUrl && configuredDataUrl.includes('<IP_KOMPUTER_SERVER>')) {
 }
 
 const dataSupabaseUrl =
-  configuredDataUrl.toLowerCase() === 'auto'
+  String(configuredDataUrl || '').toLowerCase() === 'auto'
     ? `${window.location.protocol}//${window.location.hostname}:54321`
     : configuredDataUrl;
 
@@ -31,7 +31,7 @@ if (!dataSupabaseUrl || !dataSupabaseKey) {
   console.log('✅ Supabase Data Client Initialized');
   console.log('📍 URL:', dataSupabaseUrl);
   console.log('🗄️  Purpose: Operational Data (Employees, Units, Attendance, etc.)');
-  console.log(configuredDataUrl.toLowerCase() === 'auto' ? '🐳 Environment: Local auto mode (Port 54321)' : '☁️ Environment: Hosted Supabase');
+  console.log(String(configuredDataUrl || '').toLowerCase() === 'auto' ? '🐳 Environment: Local auto mode (Port 54321)' : '☁️ Environment: Hosted Supabase');
 }
 
 // Reuse auth client to avoid auth/session race and duplicate GoTrue instances.
