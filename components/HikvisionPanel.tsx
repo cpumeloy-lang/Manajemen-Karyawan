@@ -108,7 +108,7 @@ const HikvisionPanel: React.FC = () => {
     const labelClass = 'block text-xs font-medium text-gray-600 mb-1';
 
     return (
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+        <div className="hrms-card">
             {/* Header */}
             <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-gray-50">
                 <div className="flex items-center gap-3">

@@ -25,10 +25,10 @@ export const NavButton: React.FC<NavButtonProps> = ({
 }) => (
   <button
     onClick={onClick}
-    className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-colors relative ${
+    className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-all relative ${
       isActive
-        ? 'bg-[#06736a] text-white'
-        : 'text-gray-600 hover:bg-[#e6f3f2] hover:text-[#06736a]'
+        ? 'bg-primary text-white shadow-lg shadow-primary/25'
+        : 'text-gray-400 hover:bg-gray-800 hover:text-white'
     }`}
   >
     {icon}
@@ -37,7 +37,7 @@ export const NavButton: React.FC<NavButtonProps> = ({
       <span
         className={`ml-auto min-w-[20px] h-5 px-1.5 flex items-center justify-center text-xs font-bold rounded-full ${
           isActive
-            ? 'bg-white text-[#06736a]'
+            ? 'bg-white/20 text-white'
             : 'bg-red-500 text-white animate-pulse'
         }`}
       >

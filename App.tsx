@@ -200,7 +200,7 @@ const AppContent: React.FC = () => {
 
   return (
     <Suspense fallback={lazyFallback}>
-      <div className="min-h-screen bg-gray-50 flex">
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-gray-50 to-teal-50/30 flex">
         {/* Sidebar Navigation */}
         <Sidebar
           activePortal={activePortal}

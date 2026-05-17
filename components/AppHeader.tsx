@@ -31,7 +31,7 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
 
   return (
     <>
-      <header className="flex justify-between items-center mb-8">
+      <header className="flex justify-between items-center mb-8 pb-4 border-b border-gray-200/70">
         {(isEmployeeTableView || isEmployeeViewOnly) ? (
           <div className="flex-1 max-w-lg">
             <input

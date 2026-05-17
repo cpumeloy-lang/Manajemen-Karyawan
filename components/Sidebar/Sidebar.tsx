@@ -102,7 +102,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     )}
 
     <aside className={`
-      w-64 bg-white shadow-md flex flex-col p-4 fixed h-full z-50
+      w-64 bg-gray-900 shadow-xl shadow-gray-900/20 flex flex-col p-4 fixed h-full z-50
       transition-transform duration-300 ease-in-out
       lg:translate-x-0
       ${mobileOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
@@ -116,13 +116,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
             {(systemSettings?.institution_name || 'H')[0].toUpperCase()}
           </div>
         )}
-        <h1 className="text-lg font-bold text-primary truncate">
+        <h1 className="text-lg font-bold text-white truncate">
           {systemSettings?.institution_name || 'HRMS Pro'}
         </h1>
         {/* Close button (mobile) */}
         <button
           onClick={() => setMobileOpen(false)}
-          className="ml-auto lg:hidden text-gray-400 hover:text-gray-700"
+          className="ml-auto lg:hidden text-gray-500 hover:text-gray-300"
           aria-label="Tutup menu"
         >
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -136,7 +136,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         {/* Admin Navigation */}
         {activePortal === 'operational' && isAdminRole(userRole) && (
           <>
-            <p className="px-4 py-2 text-xs font-semibold text-gray-400 uppercase">
+            <p className="px-4 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider">
               Admin
             </p>
             <NavButton
@@ -212,7 +212,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         {activePortal === 'operational' &&
           (isHrRole(userRole) || isKepalaRuanganRole(userRole)) && (
             <>
-              <p className="px-4 py-2 text-xs font-semibold text-gray-400 uppercase">
+              <p className="px-4 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider">
                 {isHrRole(userRole) ? 'HRD' : 'Kepala Ruangan'}
               </p>
               <NavButton
@@ -306,7 +306,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         {/* Employee Navigation */}
         {activePortal === 'personal' && (
           <>
-            <p className="px-4 pt-6 py-2 text-xs font-semibold text-gray-400 uppercase">
+            <p className="px-4 pt-6 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider">
               Karyawan
             </p>
             <NavButton
@@ -333,7 +333,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         {canAccessOperationalPortal && (
           <button
             onClick={onPortalToggle}
-            className="w-full flex items-center gap-3 px-4 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-[#e6f3f2] hover:text-[#06736a] mb-2 transition-colors"
+            className="w-full flex items-center gap-3 px-4 py-2 rounded-lg text-sm font-medium text-gray-400 hover:bg-gray-800 hover:text-white mb-2 transition-all"
             disabled={isLoggingOut}
           >
             <UserCircleIcon className="h-5 w-5" />
@@ -346,7 +346,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         )}
 
         {/* User Info */}
-        <div className="text-center text-xs text-gray-500 mb-2 p-2 border-t">
+        <div className="text-center text-xs text-gray-500 mb-2 p-2 border-t border-gray-800">
           <p className="font-semibold">{authUser?.profile?.nama}</p>
           <p>{authUser?.email}</p>
         </div>
@@ -354,7 +354,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         {/* Change Password Button */}
         <button
           onClick={onChangePasswordClick}
-          className="w-full flex items-center gap-3 px-4 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-[#e6f3f2] hover:text-[#06736a] mb-2 transition-colors"
+          className="w-full flex items-center gap-3 px-4 py-2 rounded-lg text-sm font-medium text-gray-400 hover:bg-gray-800 hover:text-white mb-2 transition-all"
           disabled={isLoggingOut}
         >
           <svg
@@ -377,7 +377,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         {isAdminRole(userRole) && (
           <button
             onClick={onAuditLogClick}
-            className="w-full flex items-center gap-3 px-4 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-[#e6f3f2] hover:text-[#06736a] mb-2 transition-colors"
+            className="w-full flex items-center gap-3 px-4 py-2 rounded-lg text-sm font-medium text-gray-400 hover:bg-gray-800 hover:text-white mb-2 transition-all"
             disabled={isLoggingOut}
           >
             <svg
@@ -403,8 +403,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
           disabled={isLoggingOut}
           className={`flex w-full items-center justify-center gap-3 rounded-lg px-4 py-3 text-sm font-medium transition-all ${
             isLoggingOut
-              ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-              : 'text-gray-600 hover:bg-red-50 hover:text-red-600'
+              ? 'bg-gray-800 text-gray-400 cursor-not-allowed'
+              : 'text-gray-400 hover:bg-red-900/30 hover:text-red-400'
           }`}
         >
           {isLoggingOut ? (
