@@ -108,6 +108,7 @@ const getRequesterContext = async (req) => {
     user,
     employee,
     role: String(employee.role || '').toLowerCase(),
+    dbClient, // reusable DB client for subsequent operations
   };
 };
 
@@ -421,10 +422,6 @@ app.get('/metrics', async (req, res) => {
 // ── Employee CRUD API ──
 app.post('/api/employees', async (req, res) => {
   try {
-    if (!adminSupabase || !publicSupabase) {
-      return res.status(503).json({ success: false, error: 'Supabase server clients are not configured' });
-    }
-
     const context = await getRequesterContext(req);
     if (!context.ok) {
       return res.status(context.status).json({ success: false, error: context.error });
@@ -442,7 +439,8 @@ app.post('/api/employees', async (req, res) => {
     let userId = employeeData.user_id || employeeData.userId || null;
 
     if (password && String(password).trim()) {
-      const { data: authData, error: authError } = await adminSupabase.auth.admin.createUser({
+      const authClient = adminSupabase || context.dbClient;
+      const { data: authData, error: authError } = await authClient.auth.admin.createUser({
         email: employeeData.email,
         password: String(password),
         email_confirm: true,
@@ -464,7 +462,7 @@ app.post('/api/employees', async (req, res) => {
       profilePayload.user_id = userId;
     }
 
-    const { data: newEmployee, error: profileError } = await adminSupabase
+    const { data: newEmployee, error: profileError } = await context.dbClient
       .from('employees')
       .insert(profilePayload)
       .select('*')
@@ -472,7 +470,7 @@ app.post('/api/employees', async (req, res) => {
 
     if (profileError || !newEmployee) {
       if (userId && password) {
-        await adminSupabase.auth.admin.deleteUser(userId).catch(() => {});
+        await (adminSupabase || context.dbClient).auth.admin.deleteUser(userId).catch(() => {});
       }
       logDetailedError('Employee.create.profile', profileError, { userId, email: employeeData.email });
       return res.status(400).json({ success: false, error: getClientErrorMessage('profile_save_failed', 'Gagal menyimpan profil karyawan') });
@@ -487,7 +485,7 @@ app.post('/api/employees', async (req, res) => {
         uploadedAt: doc?.uploadedAt || new Date().toISOString(),
       }));
 
-      const { error: docError } = await adminSupabase.from('documents').insert(docsToInsert);
+      const { error: docError } = await context.dbClient.from('documents').insert(docsToInsert);
       if (docError) {
         console.warn('Document insert failed after employee creation', docError);
       }
@@ -507,10 +505,6 @@ app.post('/api/employees', async (req, res) => {
 
 app.put('/api/employees/:id', async (req, res) => {
   try {
-    if (!adminSupabase || !publicSupabase) {
-      return res.status(503).json({ success: false, error: 'Supabase server clients are not configured' });
-    }
-
     const context = await getRequesterContext(req);
     if (!context.ok) {
       return res.status(context.status).json({ success: false, error: context.error });
@@ -527,7 +521,7 @@ app.put('/api/employees/:id', async (req, res) => {
 
     const sanitizedUpdate = normalizeEmployeeUpdateData(updateData);
 
-    const { data: updatedEmployee, error } = await adminSupabase
+    const { data: updatedEmployee, error } = await context.dbClient
       .from('employees')
       .update(sanitizedUpdate)
       .eq('id', req.params.id)
@@ -553,10 +547,6 @@ app.put('/api/employees/:id', async (req, res) => {
 
 app.delete('/api/employees/:id', async (req, res) => {
   try {
-    if (!adminSupabase || !publicSupabase) {
-      return res.status(503).json({ success: false, error: 'Supabase server clients are not configured' });
-    }
-
     const context = await getRequesterContext(req);
     if (!context.ok) {
       return res.status(context.status).json({ success: false, error: context.error });
@@ -566,7 +556,7 @@ app.delete('/api/employees/:id', async (req, res) => {
       return res.status(403).json({ success: false, error: 'Hanya admin yang dapat menghapus karyawan' });
     }
 
-    const { data: targetEmployee, error: fetchError } = await adminSupabase
+    const { data: targetEmployee, error: fetchError } = await context.dbClient
       .from('employees')
       .select('id, user_id, nama')
       .eq('id', req.params.id)
@@ -576,7 +566,7 @@ app.delete('/api/employees/:id', async (req, res) => {
       return res.status(404).json({ success: false, error: 'Employee not found' });
     }
 
-    const { error } = await adminSupabase
+    const { error } = await context.dbClient
       .from('employees')
       .delete()
       .eq('id', req.params.id);
@@ -646,10 +636,6 @@ app.delete('/api/audit-logs', async (req, res) => {
 
 app.post('/api/organization/units', async (req, res) => {
   try {
-    if (!adminSupabase || !publicSupabase) {
-      return res.status(503).json({ success: false, error: 'Supabase server clients are not configured' });
-    }
-
     const context = await getRequesterContext(req);
     if (!context.ok) {
       return res.status(context.status).json({ success: false, error: context.error });
@@ -672,7 +658,7 @@ app.post('/api/organization/units', async (req, res) => {
     };
     let result;
     if (unit.id) {
-      const { data, error } = await adminSupabase
+      const { data, error } = await context.dbClient
         .from('units')
         .update(payload)
         .eq('id', unit.id)
@@ -684,7 +670,7 @@ app.post('/api/organization/units', async (req, res) => {
       }
       result = data;
     } else {
-      const { data, error } = await adminSupabase
+      const { data, error } = await context.dbClient
         .from('units')
         .insert(payload)
         .select('*')
@@ -706,10 +692,6 @@ app.post('/api/organization/units', async (req, res) => {
 
 app.delete('/api/organization/units/:id', async (req, res) => {
   try {
-    if (!adminSupabase || !publicSupabase) {
-      return res.status(503).json({ success: false, error: 'Supabase server clients are not configured' });
-    }
-
     const context = await getRequesterContext(req);
     if (!context.ok) {
       return res.status(context.status).json({ success: false, error: context.error });
@@ -719,7 +701,7 @@ app.delete('/api/organization/units/:id', async (req, res) => {
       return res.status(403).json({ success: false, error: 'Hanya admin yang dapat menghapus unit kerja' });
     }
 
-    const { data: targetUnit, error: fetchError } = await adminSupabase
+    const { data: targetUnit, error: fetchError } = await context.dbClient
       .from('units')
       .select('id, nama')
       .eq('id', req.params.id)
@@ -729,13 +711,13 @@ app.delete('/api/organization/units/:id', async (req, res) => {
       return res.status(404).json({ success: false, error: 'Unit kerja tidak ditemukan' });
     }
 
-    const { error } = await adminSupabase.from('units').delete().eq('id', req.params.id);
+    const { error } = await context.dbClient.from('units').delete().eq('id', req.params.id);
     if (error) {
       logDetailedError('Unit.delete', error, { unitId: req.params.id });
       return res.status(400).json({ success: false, error: getClientErrorMessage('delete_failed', 'Gagal menghapus unit kerja') });
     }
 
-    await adminSupabase
+    await context.dbClient
       .from('employees')
       .update({ unitKerjaId: null })
       .eq('unitKerjaId', req.params.id)
@@ -751,10 +733,6 @@ app.delete('/api/organization/units/:id', async (req, res) => {
 
 app.post('/api/organization/departments', async (req, res) => {
   try {
-    if (!adminSupabase || !publicSupabase) {
-      return res.status(503).json({ success: false, error: 'Supabase server clients are not configured' });
-    }
-
     const context = await getRequesterContext(req);
     if (!context.ok) {
       return res.status(context.status).json({ success: false, error: context.error });
@@ -772,14 +750,14 @@ app.post('/api/organization/departments', async (req, res) => {
     const payload = normalizeSimpleNameEntity(department);
     let result;
     if (department.id) {
-      const { data, error } = await adminSupabase.from('departments').update(payload).eq('id', department.id).select('*').single();
+      const { data, error } = await context.dbClient.from('departments').update(payload).eq('id', department.id).select('*').single();
       if (error || !data) {
         logDetailedError('Department.update', error, { departmentId: department.id });
         return res.status(400).json({ success: false, error: getClientErrorMessage('department_save_failed', 'Gagal menyimpan departemen') });
       }
       result = data;
     } else {
-      const { data, error } = await adminSupabase.from('departments').insert(payload).select('*').single();
+      const { data, error } = await context.dbClient.from('departments').insert(payload).select('*').single();
       if (error || !data) {
         logDetailedError('Department.create', error, { departmentName: payload.nama });
         return res.status(400).json({ success: false, error: getClientErrorMessage('department_save_failed', 'Gagal menyimpan departemen') });
@@ -797,10 +775,6 @@ app.post('/api/organization/departments', async (req, res) => {
 
 app.delete('/api/organization/departments/:id', async (req, res) => {
   try {
-    if (!adminSupabase || !publicSupabase) {
-      return res.status(503).json({ success: false, error: 'Supabase server clients are not configured' });
-    }
-
     const context = await getRequesterContext(req);
     if (!context.ok) {
       return res.status(context.status).json({ success: false, error: context.error });
@@ -810,18 +784,18 @@ app.delete('/api/organization/departments/:id', async (req, res) => {
       return res.status(403).json({ success: false, error: 'Hanya admin yang dapat menghapus departemen' });
     }
 
-    const { data: targetDept, error: fetchError } = await adminSupabase.from('departments').select('id, nama').eq('id', req.params.id).maybeSingle();
+    const { data: targetDept, error: fetchError } = await context.dbClient.from('departments').select('id, nama').eq('id', req.params.id).maybeSingle();
     if (fetchError || !targetDept) {
       return res.status(404).json({ success: false, error: 'Departemen tidak ditemukan' });
     }
 
-    const { error } = await adminSupabase.from('departments').delete().eq('id', req.params.id);
+    const { error } = await context.dbClient.from('departments').delete().eq('id', req.params.id);
     if (error) {
       logDetailedError('Department.delete', error, { departmentId: req.params.id });
       return res.status(400).json({ success: false, error: getClientErrorMessage('delete_failed', 'Gagal menghapus departemen') });
     }
 
-    await adminSupabase
+    await context.dbClient
       .from('employees')
       .update({ departemen: '' })
       .eq('departemen', targetDept.nama)
@@ -837,10 +811,6 @@ app.delete('/api/organization/departments/:id', async (req, res) => {
 
 app.post('/api/organization/positions', async (req, res) => {
   try {
-    if (!adminSupabase || !publicSupabase) {
-      return res.status(503).json({ success: false, error: 'Supabase server clients are not configured' });
-    }
-
     const context = await getRequesterContext(req);
     if (!context.ok) {
       return res.status(context.status).json({ success: false, error: context.error });
@@ -858,14 +828,14 @@ app.post('/api/organization/positions', async (req, res) => {
     const payload = normalizeSimpleNameEntity(position);
     let result;
     if (position.id) {
-      const { data, error } = await adminSupabase.from('positions').update(payload).eq('id', position.id).select('*').single();
+      const { data, error } = await context.dbClient.from('positions').update(payload).eq('id', position.id).select('*').single();
       if (error || !data) {
         logDetailedError('Position.update', error, { positionId: position.id });
         return res.status(400).json({ success: false, error: getClientErrorMessage('position_save_failed', 'Gagal menyimpan jabatan') });
       }
       result = data;
     } else {
-      const { data, error } = await adminSupabase.from('positions').insert(payload).select('*').single();
+      const { data, error } = await context.dbClient.from('positions').insert(payload).select('*').single();
       if (error || !data) {
         logDetailedError('Position.create', error, { positionName: payload.nama });
         return res.status(400).json({ success: false, error: getClientErrorMessage('position_save_failed', 'Gagal menyimpan jabatan') });
@@ -883,10 +853,6 @@ app.post('/api/organization/positions', async (req, res) => {
 
 app.delete('/api/organization/positions/:id', async (req, res) => {
   try {
-    if (!adminSupabase || !publicSupabase) {
-      return res.status(503).json({ success: false, error: 'Supabase server clients are not configured' });
-    }
-
     const context = await getRequesterContext(req);
     if (!context.ok) {
       return res.status(context.status).json({ success: false, error: context.error });
@@ -896,18 +862,18 @@ app.delete('/api/organization/positions/:id', async (req, res) => {
       return res.status(403).json({ success: false, error: 'Hanya admin yang dapat menghapus jabatan' });
     }
 
-    const { data: targetPos, error: fetchError } = await adminSupabase.from('positions').select('id, nama').eq('id', req.params.id).maybeSingle();
+    const { data: targetPos, error: fetchError } = await context.dbClient.from('positions').select('id, nama').eq('id', req.params.id).maybeSingle();
     if (fetchError || !targetPos) {
       return res.status(404).json({ success: false, error: 'Jabatan tidak ditemukan' });
     }
 
-    const { error } = await adminSupabase.from('positions').delete().eq('id', req.params.id);
+    const { error } = await context.dbClient.from('positions').delete().eq('id', req.params.id);
     if (error) {
       logDetailedError('Position.delete', error, { positionId: req.params.id });
       return res.status(400).json({ success: false, error: getClientErrorMessage('delete_failed', 'Gagal menghapus jabatan') });
     }
 
-    await adminSupabase
+    await context.dbClient
       .from('employees')
       .update({ jabatan: '' })
       .eq('jabatan', targetPos.nama)
@@ -923,10 +889,6 @@ app.delete('/api/organization/positions/:id', async (req, res) => {
 
 app.post('/api/attendance-change-requests/bulk', async (req, res) => {
   try {
-    if (!adminSupabase || !publicSupabase) {
-      return res.status(503).json({ success: false, error: 'Supabase server clients are not configured' });
-    }
-
     const context = await getRequesterContext(req);
     if (!context.ok) {
       return res.status(context.status).json({ success: false, error: context.error });
@@ -949,7 +911,7 @@ app.post('/api/attendance-change-requests/bulk', async (req, res) => {
       status: payload.status || 'pending',
     }));
 
-    const { error } = await adminSupabase
+    const { error } = await context.dbClient
       .from('attendance_change_requests')
       .insert(normalizedPayloads);
 
