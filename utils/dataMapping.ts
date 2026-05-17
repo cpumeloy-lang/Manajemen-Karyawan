@@ -44,10 +44,16 @@ export const mapEmployeeToDatabase = (data: any) => {
 
   const resolvedUnitKerjaId = unitKerjaId ?? _unit_kerja_id ?? null;
 
+  // Extract salary from compensation object (form state) or use top-level values (from DB load)
+  const gajiPokok = compensation?.gajiPokok ?? rest.gajiPokok ?? null;
+  const tunjanganProfesi = compensation?.tunjanganProfesi ?? rest.tunjanganProfesi ?? null;
+
   return {
     ...rest,
     unitKerjaId: resolvedUnitKerjaId,
     user_id: rest.user_id || null,
+    gajiPokok,
+    tunjanganProfesi,
     ktp_number: ktpNumber ?? _ktp_number,
     bpjs_kesehatan: bpjsKesehatan ?? _bpjs_kesehatan,
     bpjs_ketenagakerjaan: bpjsKetenagakerjaan ?? _bpjs_ketenagakerjaan,

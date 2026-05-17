@@ -197,6 +197,8 @@ const normalizeEmployeeUpdateData = (updateData) => pick(updateData, [
   'nomorSTR',
   'tanggalKadaluarsaSTR',
   'unitKerjaId',
+  'gajiPokok',
+  'tunjanganProfesi',
   'sertifikasi',
   'kompetensi',
   'compensation',
@@ -515,8 +517,11 @@ app.put('/api/employees/:id', async (req, res) => {
       .single();
 
     if (error || !updatedEmployee) {
-      logDetailedError('Employee.update', error, { employeeId: req.params.id });
-      return res.status(400).json({ success: false, error: getClientErrorMessage('profile_update_failed', 'Gagal memperbarui profil karyawan') });
+      logDetailedError('Employee.update', error, { employeeId: req.params.id, sanitizedKeys: Object.keys(sanitizedUpdate) });
+      const errMsg = IS_PROD
+        ? getClientErrorMessage('profile_update_failed', 'Gagal memperbarui profil karyawan')
+        : `Gagal memperbarui: ${error?.message || error?.details || 'karyawan tidak ditemukan'}`;
+      return res.status(400).json({ success: false, error: errMsg });
     }
 
     await invalidateEmployeeCaches(updatedEmployee);
