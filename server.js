@@ -242,7 +242,12 @@ const normalizeEmployeeUpdateData = (updateData) => pick(updateData, [
 ]);
 
 const normalizeUnitData = (unit) => pick(unit, ['id', 'nama', 'shifts', 'shift_assignments']);
-const normalizeSimpleNameEntity = (entity) => pick(entity, ['id', 'nama']);
+const normalizeSimpleNameEntity = (entity) => {
+  const obj = pick(entity, ['id', 'nama']);
+  // remove empty id values to avoid invalid UUID inserts
+  if (!obj.id) delete obj.id;
+  return obj;
+};
 const normalizeAttendanceData = (attendance) => pick(attendance, [
   'employeeId',
   'tanggal',
@@ -795,11 +800,14 @@ app.delete('/api/organization/departments/:id', async (req, res) => {
       return res.status(400).json({ success: false, error: getClientErrorMessage('delete_failed', 'Gagal menghapus departemen') });
     }
 
-    await context.dbClient
-      .from('employees')
-      .update({ departemen: '' })
-      .eq('departemen', targetDept.nama)
-      .catch(() => {});
+    try {
+      const { error: _deptUpdateError } = await context.dbClient
+        .from('employees')
+        .update({ departemen: '' })
+        .eq('departemen', targetDept.nama);
+    } catch (e) {
+      // ignore
+    }
 
     await invalidateOrganizationCaches();
     return res.json({ success: true, data: { id: req.params.id } });
@@ -867,17 +875,24 @@ app.delete('/api/organization/positions/:id', async (req, res) => {
       return res.status(404).json({ success: false, error: 'Jabatan tidak ditemukan' });
     }
 
-    const { error } = await context.dbClient.from('positions').delete().eq('id', req.params.id);
-    if (error) {
-      logDetailedError('Position.delete', error, { positionId: req.params.id });
+    const { error: employeeUpdateError } = await context.dbClient
+      .from('employees')
+      .update({ jabatan: '' })
+      .eq('jabatan', targetPos.nama);
+
+    if (employeeUpdateError) {
+      logDetailedError('Position.delete.employeeUnlink', employeeUpdateError, {
+        positionId: req.params.id,
+        positionName: targetPos.nama,
+      });
       return res.status(400).json({ success: false, error: getClientErrorMessage('delete_failed', 'Gagal menghapus jabatan') });
     }
 
-    await context.dbClient
-      .from('employees')
-      .update({ jabatan: '' })
-      .eq('jabatan', targetPos.nama)
-      .catch(() => {});
+    const { error } = await context.dbClient.from('positions').delete().eq('id', req.params.id);
+    if (error) {
+      logDetailedError('Position.delete', error, { positionId: req.params.id, positionName: targetPos.nama });
+      return res.status(400).json({ success: false, error: getClientErrorMessage('delete_failed', 'Gagal menghapus jabatan') });
+    }
 
     await invalidateOrganizationCaches();
     return res.json({ success: true, data: { id: req.params.id } });
