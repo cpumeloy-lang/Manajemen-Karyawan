@@ -153,7 +153,7 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ isOpen, onClose, onSave, em
             }
         } else if (name === 'unitKerjaId') {
             // Always update unitKerjaId, and if role is kepala_ruangan, also update managedUnitId
-            if (employee.role === 'kepala_ruangan') {
+            if (String(employee.role || '') === 'kepala_ruangan') {
                 setEmployee({ ...employee, unitKerjaId: value, managedUnitId: value });
             } else {
                 setEmployee({ ...employee, unitKerjaId: value });
@@ -310,11 +310,11 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ isOpen, onClose, onSave, em
             newErrors.nomorSTR = "Nomor STR wajib diisi untuk Dokter dan Perawat";
         }
         // Validasi managedUnitId untuk kepala_ruangan
-        if (employee.role === 'kepala_ruangan' && !employee.managedUnitId) {
+        if (String(employee.role || '') === 'kepala_ruangan' && !employee.managedUnitId) {
             newErrors.managedUnitId = "Unit yang dikelola wajib dipilih untuk Kepala Ruangan";
         }
         // Validasi unitKerjaId - wajib untuk semua karyawan agar muncul di dashboard kepala ruangan
-        if (employee.role !== 'admin' && employee.role !== 'hrd' && !employee.unitKerjaId) {
+        if (String(employee.role || '') !== 'admin' && String(employee.role || '') !== 'hrd' && !employee.unitKerjaId) {
             newErrors.unitKerjaId = "Unit Kerja wajib dipilih agar karyawan terdeteksi di dashboard";
         }
         setErrors(newErrors);
@@ -1348,7 +1348,7 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ isOpen, onClose, onSave, em
                                         </div>
 
                                         {/* Unit Kerja / Unit yang Dikepalai - Conditional based on Role */}
-                                        {employee.role === 'kepala_ruangan' ? (
+                                        {String(employee.role || '') === 'kepala_ruangan' ? (
                                             <div>
                                                 <label className="block text-sm font-medium text-gray-700 mb-2">Unit yang Dikepalai *</label>
                                                 <select 
