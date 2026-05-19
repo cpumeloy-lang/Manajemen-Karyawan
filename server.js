@@ -378,14 +378,49 @@ app.use(express.static(path.join(__dirname, 'dist'), {
 }));
 
 // ── Health check ──
-app.get('/api/health', (req, res) => {
-  res.json({
+app.get('/api/health', async (req, res) => {
+  const health = {
     status: 'healthy',
     timestamp: new Date().toISOString(),
     uptime: process.uptime(),
     memoryUsage: process.memoryUsage().rss,
     nodeVersion: process.version,
-  });
+    checks: {
+      database: 'unknown',
+      redis: 'unknown',
+    },
+  };
+
+  // Check database connection
+  try {
+    const { error } = await publicSupabase
+      .from('employees')
+      .select('id')
+      .limit(1);
+    
+    health.checks.database = error ? 'unhealthy' : 'healthy';
+    if (error) health.status = 'degraded';
+  } catch (err) {
+    health.checks.database = 'error';
+    health.status = 'degraded';
+  }
+
+  // Check Redis connection
+  try {
+    const { getCache } = await import('./services/redisCache.js');
+    const cache = getCache();
+    const testKey = 'health-check';
+    await cache.set(testKey, 'ok', 5);
+    const result = await cache.get(testKey);
+    health.checks.redis = result === 'ok' ? 'healthy' : 'unhealthy';
+    if (result !== 'ok') health.status = 'degraded';
+  } catch (err) {
+    health.checks.redis = 'error';
+    health.status = 'degraded';
+  }
+
+  const statusCode = health.status === 'healthy' ? 200 : 503;
+  res.status(statusCode).json(health);
 });
 
 // ── Prometheus metrics endpoint ──
