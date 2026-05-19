@@ -167,7 +167,7 @@ const ROLE_PERMISSIONS: Record<UserRole, string[]> = {
 };
 
 const normalizeRole = (role: string | null | undefined): UserRole | null => {
-  if (!role) return null;
+  if (!role || typeof role !== 'string') return null;
   const normalized = role.toLowerCase();
   return Object.prototype.hasOwnProperty.call(ROLE_PERMISSIONS, normalized)
     ? (normalized as UserRole)
