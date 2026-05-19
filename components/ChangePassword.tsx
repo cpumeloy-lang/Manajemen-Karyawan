@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from 'react';
 import { supabase } from '../services/supabaseClient.ts';
-import { classifyError } from '../services/errorHandlingService.ts';
 
 interface ChangePasswordProps {
     isOpen: boolean;
@@ -53,7 +52,7 @@ const ChangePassword: React.FC<ChangePasswordProps> = ({ isOpen, onClose }) => {
                 setMessage('');
             }, 2000);
         } catch (err: any) {
-            setError(classifyError(err).userMessage);
+            setError(err.message || 'Gagal mengubah password');
         } finally {
             setLoading(false);
         }

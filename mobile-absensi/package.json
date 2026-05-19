@@ -51,12 +51,5 @@
   "devDependencies": {
     "@types/react": "~18.2.79",
     "typescript": "~5.3.3"
-  },
-  "expo": {
-    "autolinking": {
-      "exclude": [
-        "@sentry/react-native"
-      ]
-    }
   }
 }

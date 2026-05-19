@@ -22,11 +22,11 @@
           "locationAlwaysAndWhenInUsePermission": "Aplikasi memerlukan lokasi untuk mencatat titik absensi Anda."
         }
       ],
-      "expo-secure-store"
+      "expo-secure-store",
+      "react-native-fast-tflite"
     ],
-    "_pluginsForRebuild_NOTE": "vision-camera (ESM bug) + fast-tflite (nitro-modules butuh RN 0.76+) disabled. Semua punya fallback graceful.",
     "_pluginsForRebuild": [
-      "react-native-fast-tflite",
+      "[CATATAN] Plugin di bawah ini diaktifkan kembali saat melakukan `npx expo prebuild` / `npm run android` (rebuild APK). Saat ini disable agar Metro bisa start tanpa bug ESM resolution dari react-native-vision-camera.",
       [
         "react-native-vision-camera",
         {
@@ -68,8 +68,8 @@
       "bundler": "metro"
     },
     "extra": {
-      "privacyPolicyUrl": "https://hrms.example.com/privacy",
-      "supportEmail": "support@hrms.example.com"
+      "privacyPolicyUrl": "https://your-domain.com/privacy",
+      "supportEmail": "support@your-domain.com"
     }
   }
 }

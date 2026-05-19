@@ -65,6 +65,3 @@ mobile-absensi/ios/Pods/
 supabase/.temp/
 supabase/.branches/
 
-# Vercel serverless functions (production-only)
-api/
-

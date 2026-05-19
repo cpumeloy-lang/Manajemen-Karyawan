@@ -4,7 +4,6 @@ import { getRotationPatterns, createRotationPattern, updateRotationPattern, dele
 import { PlusIcon, TrashIcon, PencilIcon } from './icons.tsx';
 import LoadingSpinner from './LoadingSpinner.tsx';
 import { useConfirm } from './ConfirmDialog.tsx';
-import { classifyError } from '../services/errorHandlingService.ts';
 
 const COLOR_CLASSES: Record<ShiftColor, string> = {
     yellow: 'bg-yellow-200 text-yellow-900',
@@ -48,7 +47,7 @@ const RotationPatternPanel: React.FC<RotationPatternPanelProps> = ({ unitId, uni
             const data = await getRotationPatterns(unitId);
             setPatterns(data);
         } catch (err: any) {
-            onNotify('error', classifyError(err).userMessage);
+            onNotify('error', `Gagal memuat pola rotasi: ${err.message}`);
         } finally {
             setLoading(false);
         }
@@ -113,7 +112,7 @@ const RotationPatternPanel: React.FC<RotationPatternPanelProps> = ({ unitId, uni
             resetForm();
             await loadPatterns();
         } catch (err: any) {
-            onNotify('error', classifyError(err).userMessage);
+            onNotify('error', `Gagal menyimpan: ${err.message}`);
         } finally {
             setSaving(false);
         }
@@ -132,7 +131,7 @@ const RotationPatternPanel: React.FC<RotationPatternPanelProps> = ({ unitId, uni
             onNotify('success', `Pola "${p.name}" dihapus.`);
             await loadPatterns();
         } catch (err: any) {
-            onNotify('error', classifyError(err).userMessage);
+            onNotify('error', `Gagal menghapus: ${err.message}`);
         }
     };
 

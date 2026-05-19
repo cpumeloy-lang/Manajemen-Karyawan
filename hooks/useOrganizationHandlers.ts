@@ -9,7 +9,7 @@ import { useConfirm } from '../components/ConfirmDialog';
 
 export const useOrganizationHandlers = () => {
   const confirm = useConfirm();
-  const { departments, positions } = useAppData();
+  const { departments, positions, workUnits } = useAppData();
   const { authUser } = useAuth();
   const { activePortal } = useUI();
   const { setWorkUnits, setDepartments, setPositions, setEmployees } = useAppDataActions();
@@ -40,6 +40,19 @@ export const useOrganizationHandlers = () => {
     async (unit: WorkUnit) => {
       if (!ensureCanManageMasterData('Kelola unit kerja')) return;
 
+      // Client-side validation for duplicates and empty names
+      const isDuplicate = workUnits?.some(
+        (u) => u.nama.toLowerCase() === unit.nama.toLowerCase() && u.id !== unit.id
+      );
+      if (isDuplicate) {
+        showError('Nama unit kerja sudah ada', `Unit kerja dengan nama "${unit.nama}" sudah terdaftar.`);
+        return;
+      }
+      if (!unit.nama?.trim()) {
+        showError('Validasi Gagal', 'Nama unit kerja tidak boleh kosong.');
+        return;
+      }
+
       try {
         const isCreate = !unit.id;
         const authHeaders = await getAuthHeaders();
@@ -53,7 +66,10 @@ export const useOrganizationHandlers = () => {
         });
 
         const result = await response.json().catch(() => null);
-        if (!response.ok) throw new Error(result?.error || 'Gagal menyimpan unit kerja');
+        if (!response.ok) {
+          if (response.status === 409) throw new Error(result?.error || 'Nama sudah ada');
+          throw new Error(result?.error || 'Gagal menyimpan unit kerja');
+        }
 
         const savedUnit = result?.data as WorkUnit;
 
@@ -81,7 +97,7 @@ export const useOrganizationHandlers = () => {
         showError('Gagal menyimpan unit kerja', error);
       }
     },
-    [activePortal, authUser, setWorkUnits, showSuccess, showError]
+    [activePortal, authUser, workUnits, setWorkUnits, showSuccess, showError]
   );
 
   const handleDeleteWorkUnit = useCallback(
@@ -137,6 +153,19 @@ export const useOrganizationHandlers = () => {
     async (dept: Department) => {
       if (!ensureCanManageMasterData('Kelola departemen')) return;
 
+      // Client-side validation for duplicates and empty names
+      const isDuplicate = departments?.some(
+        (d) => d.nama.toLowerCase() === dept.nama.toLowerCase() && d.id !== dept.id
+      );
+      if (isDuplicate) {
+        showError('Nama departemen sudah ada', `Departemen dengan nama "${dept.nama}" sudah terdaftar.`);
+        return;
+      }
+      if (!dept.nama?.trim()) {
+        showError('Validasi Gagal', 'Nama departemen tidak boleh kosong.');
+        return;
+      }
+
       try {
         const isCreate = !dept.id;
         const authHeaders = await getAuthHeaders();
@@ -150,7 +179,10 @@ export const useOrganizationHandlers = () => {
         });
 
         const result = await response.json().catch(() => null);
-        if (!response.ok) throw new Error(result?.error || 'Gagal menyimpan departemen');
+        if (!response.ok) {
+          if (response.status === 409) throw new Error(result?.error || 'Nama sudah ada');
+          throw new Error(result?.error || 'Gagal menyimpan departemen');
+        }
 
         const savedDept = result?.data as Department;
 
@@ -178,7 +210,7 @@ export const useOrganizationHandlers = () => {
         showError('Gagal menyimpan departemen', error);
       }
     },
-    [activePortal, authUser, setDepartments, showSuccess, showError]
+    [activePortal, authUser, departments, setDepartments, showSuccess, showError]
   );
 
   const handleDeleteDepartment = useCallback(
@@ -235,6 +267,19 @@ export const useOrganizationHandlers = () => {
     async (position: Position) => {
       if (!ensureCanManageMasterData('Kelola jabatan')) return;
 
+      // Client-side validation for duplicates and empty names
+      const isDuplicate = positions?.some(
+        (p) => p.nama.toLowerCase() === position.nama.toLowerCase() && p.id !== position.id
+      );
+      if (isDuplicate) {
+        showError('Nama jabatan sudah ada', `Jabatan dengan nama "${position.nama}" sudah terdaftar.`);
+        return;
+      }
+      if (!position.nama?.trim()) {
+        showError('Validasi Gagal', 'Nama jabatan tidak boleh kosong.');
+        return;
+      }
+
       try {
         const isCreate = !position.id;
         const authHeaders = await getAuthHeaders();
@@ -248,7 +293,10 @@ export const useOrganizationHandlers = () => {
         });
 
         const result = await response.json().catch(() => null);
-        if (!response.ok) throw new Error(result?.error || 'Gagal menyimpan jabatan');
+        if (!response.ok) {
+          if (response.status === 409) throw new Error(result?.error || 'Nama sudah ada');
+          throw new Error(result?.error || 'Gagal menyimpan jabatan');
+        }
 
         const savedPos = result?.data as Position;
 
@@ -276,7 +324,7 @@ export const useOrganizationHandlers = () => {
         showError('Gagal menyimpan jabatan', error);
       }
     },
-    [activePortal, authUser, setPositions, showSuccess, showError]
+    [activePortal, authUser, positions, setPositions, showSuccess, showError]
   );
 
   const handleDeletePosition = useCallback(

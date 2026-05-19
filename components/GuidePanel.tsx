@@ -821,7 +821,7 @@ const GuidePanel: React.FC = () => {
     const current = sections[activeTab];
 
     return (
-        <div className="hrms-card">
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
             {/* Header */}
             <div className="px-6 py-5 border-b border-gray-100 bg-gradient-to-r from-[#06736a]/10 to-transparent">
                 <div className="flex items-center gap-3">

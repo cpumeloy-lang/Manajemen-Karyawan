@@ -8,7 +8,6 @@ import LoadingSpinner from './LoadingSpinner.tsx';
 import RotationPatternPanel from './RotationPatternPanel.tsx';
 import ScheduleCalendarPanel from './ScheduleCalendarPanel.tsx';
 import { createAuditLog } from '../services/auditLogService.ts';
-import { classifyError } from '../services/errorHandlingService.ts';
 
 const SHIFT_COLORS: ShiftColor[] = ['yellow','blue','indigo','green','red','purple','orange','pink','teal','gray'];
 const COLOR_CLASSES: Record<ShiftColor, { badge: string; dot: string }> = {
@@ -137,7 +136,7 @@ const UnitScheduleManagement: React.FC<UnitScheduleManagementProps> = ({ kepalaR
 
         } catch (error: any) {
             console.error('❌ Error loading unit data:', error);
-            showNotification('error', classifyError(error).userMessage);
+            showNotification('error', `Gagal memuat data unit: ${error.message}`);
         } finally {
             setLoading(false);
         }
@@ -205,7 +204,7 @@ const UnitScheduleManagement: React.FC<UnitScheduleManagementProps> = ({ kepalaR
 
         } catch (error: any) {
             console.error('❌ Error saving shift assignments:', error);
-            showNotification('error', classifyError(error).userMessage);
+            showNotification('error', `Gagal menyimpan penugasan shift: ${error.message}`);
         } finally {
             setSaving(false);
         }
@@ -303,7 +302,7 @@ const UnitScheduleManagement: React.FC<UnitScheduleManagementProps> = ({ kepalaR
             setOriginalUnitShifts([...unitShifts]);
             showNotification('success', `✅ Konfigurasi ${unitShifts.length} shift berhasil disimpan untuk ${workUnit?.nama}.`);
         } catch (error: any) {
-            showNotification('error', classifyError(error).userMessage);
+            showNotification('error', `Gagal menyimpan konfigurasi shift: ${error.message}`);
         } finally {
             setSavingConfig(false);
         }

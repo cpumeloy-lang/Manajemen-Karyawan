@@ -1,5 +1,4 @@
 import express from 'express';
-import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { createReadStream, existsSync } from 'fs';
@@ -8,7 +7,8 @@ import { createClient } from '@supabase/supabase-js';
 import loggingService from './services/loggingService.js';
 import { getRedisStats } from './services/redisAdapter.js';
 
-dotenv.config();
+import helmet from 'helmet';
+import cors from 'cors';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -32,9 +32,6 @@ const adminSupabase = SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY
       auth: { persistSession: false, autoRefreshToken: false },
     })
   : null;
-
-// Fallback for local development: use anon key if service role key not available
-const auditLogSupabase = adminSupabase || publicSupabase;
 
 const invalidateEmployeeCaches = async (employee) => {
   try {
@@ -108,7 +105,7 @@ const getRequesterContext = async (req) => {
     user,
     employee,
     role: String(employee.role || '').toLowerCase(),
-    dbClient, // reusable DB client for subsequent operations
+    dbClient,
   };
 };
 
@@ -172,29 +169,27 @@ const normalizeEmployeeData = (employeeData) => pick(employeeData, [
   'nomorSTR',
   'tanggalKadaluarsaSTR',
   'unitKerjaId',
-  'gajiPokok',
-  'tunjanganProfesi',
   'sertifikasi',
   'kompetensi',
+  'compensation',
+  'ktpNumber',
   'npwp',
+  'bpjsKesehatan',
+  'bpjsKetenagakerjaan',
   'agama',
+  'maritalStatus',
   'dependents',
   'address',
+  'emergencyContacts',
   'education',
-  // Extended fields (snake_case - matches DB columns from cloud_migration_patch)
-  'ktp_number',
-  'bpjs_kesehatan',
-  'bpjs_ketenagakerjaan',
-  'marital_status',
-  'emergency_contacts',
-  'work_history',
-  'bank_account',
-  'is_profile_completed',
-  'is_verified',
-  'verified_by',
-  'verified_at',
-  'is_locked',
-  'managed_unit_id',
+  'workHistory',
+  'bankAccount',
+  'isProfileCompleted',
+  'isVerified',
+  'verifiedBy',
+  'verifiedAt',
+  'isLocked',
+  'managedUnitId',
 ]);
 
 const normalizeEmployeeUpdateData = (updateData) => pick(updateData, [
@@ -216,38 +211,31 @@ const normalizeEmployeeUpdateData = (updateData) => pick(updateData, [
   'nomorSTR',
   'tanggalKadaluarsaSTR',
   'unitKerjaId',
-  'gajiPokok',
-  'tunjanganProfesi',
   'sertifikasi',
   'kompetensi',
+  'compensation',
+  'ktpNumber',
   'npwp',
+  'bpjsKesehatan',
+  'bpjsKetenagakerjaan',
   'agama',
+  'maritalStatus',
   'dependents',
   'address',
+  'emergencyContacts',
   'education',
-  // Extended fields (snake_case - matches DB columns from cloud_migration_patch)
-  'ktp_number',
-  'bpjs_kesehatan',
-  'bpjs_ketenagakerjaan',
-  'marital_status',
-  'emergency_contacts',
-  'work_history',
-  'bank_account',
-  'is_profile_completed',
-  'is_verified',
-  'verified_by',
-  'verified_at',
-  'is_locked',
-  'managed_unit_id',
+  'workHistory',
+  'bankAccount',
+  'isProfileCompleted',
+  'isVerified',
+  'verifiedBy',
+  'verifiedAt',
+  'isLocked',
+  'managedUnitId',
 ]);
 
 const normalizeUnitData = (unit) => pick(unit, ['id', 'nama', 'shifts', 'shift_assignments']);
-const normalizeSimpleNameEntity = (entity) => {
-  const obj = pick(entity, ['id', 'nama']);
-  // remove empty id values to avoid invalid UUID inserts
-  if (!obj.id) delete obj.id;
-  return obj;
-};
+const normalizeSimpleNameEntity = (entity) => pick(entity, ['id', 'nama']);
 const normalizeAttendanceData = (attendance) => pick(attendance, [
   'employeeId',
   'tanggal',
@@ -280,36 +268,23 @@ const normalizeRequestPayload = (payload) => pick(payload, [
 
 // (Duplicate block of pick + normalize* helpers removed.)
 
-// Parse JSON bodies for API endpoints
-app.use(express.json());
+// Parse JSON bodies for API endpoints (limit to prevent DoS)
+app.use(express.json({ limit: '10mb' }));
 
-// ── Security Headers (Helmet-like, zero dependency) ──
-app.use((req, res, next) => {
-  res.setHeader('X-Content-Type-Options', 'nosniff');
-  res.setHeader('X-Frame-Options', 'DENY');
-  res.setHeader('X-XSS-Protection', '1; mode=block');
-  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
-  res.setHeader('Permissions-Policy', 'camera=(self), microphone=(), geolocation=(self)');
-  if (IS_PROD) {
-    res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
-  }
-  res.removeHeader('X-Powered-By');
-  next();
-});
+// ── Security Headers ──
+app.use(helmet({
+  contentSecurityPolicy: false, // CSP handled by Vite build
+  crossOriginEmbedderPolicy: false,
+}));
 
 // ── CORS ──
 const ALLOWED_ORIGINS = (process.env.CORS_ORIGINS || '').split(',').filter(Boolean);
-app.use((req, res, next) => {
-  const origin = req.headers.origin;
-  if (origin && (ALLOWED_ORIGINS.length === 0 || ALLOWED_ORIGINS.includes(origin))) {
-    res.setHeader('Access-Control-Allow-Origin', origin);
-    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-    res.setHeader('Access-Control-Max-Age', '86400');
-  }
-  if (req.method === 'OPTIONS') return res.sendStatus(204);
-  next();
-});
+app.use(cors({
+  origin: ALLOWED_ORIGINS.length > 0 ? ALLOWED_ORIGINS : true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  maxAge: 86400,
+}));
 
 // ── Simple Rate Limiter (in-memory, per IP) ──
 const rateLimitMap = new Map();
@@ -534,11 +509,8 @@ app.put('/api/employees/:id', async (req, res) => {
       .single();
 
     if (error || !updatedEmployee) {
-      logDetailedError('Employee.update', error, { employeeId: req.params.id, sanitizedKeys: Object.keys(sanitizedUpdate) });
-      const errMsg = IS_PROD
-        ? `Gagal memperbarui: ${error?.message || error?.details || 'karyawan tidak ditemukan'}`
-        : `Gagal memperbarui: ${error?.message || error?.details || 'karyawan tidak ditemukan'}`;
-      return res.status(400).json({ success: false, error: errMsg });
+      logDetailedError('Employee.update', error, { employeeId: req.params.id });
+      return res.status(400).json({ success: false, error: getClientErrorMessage('profile_update_failed', 'Gagal memperbarui profil karyawan') });
     }
 
     await invalidateEmployeeCaches(updatedEmployee);
@@ -586,55 +558,6 @@ app.delete('/api/employees/:id', async (req, res) => {
     return res.json({ success: true, data: { id: req.params.id } });
   } catch (err) {
     logDetailedError('Employee.delete.endpoint', err, { employeeId: req.params.id });
-    return res.status(500).json({ success: false, error: getClientErrorMessage('internal_error', 'internal_error') });
-  }
-});
-
-// ── Audit Log Cleanup (Admin only) ──
-app.delete('/api/audit-logs', async (req, res) => {
-  try {
-    if (!auditLogSupabase) {
-      return res.status(503).json({ success: false, error: 'Supabase client not configured' });
-    }
-
-    const context = await getRequesterContext(req);
-    if (!context.ok) {
-      return res.status(context.status).json({ success: false, error: context.error });
-    }
-
-    if (context.role !== 'admin') {
-      return res.status(403).json({ success: false, error: 'Hanya admin yang dapat menghapus audit log' });
-    }
-
-    const olderThanDays = parseInt(req.query.olderThanDays, 10) || 0;
-
-    if (olderThanDays > 0) {
-      // Delete logs older than X days via RPC
-      const { data, error } = await auditLogSupabase.rpc('cleanup_old_audit_logs', {
-        older_than_days: olderThanDays,
-      });
-
-      if (error) {
-        logDetailedError('AuditLog.cleanup', error, { olderThanDays });
-        return res.status(400).json({ success: false, error: error.message || 'Gagal membersihkan log lama' });
-      }
-
-      const deletedCount = data?.[0]?.deleted_count || 0;
-      return res.json({ success: true, data: { deletedCount, olderThanDays } });
-    } else {
-      // Delete all logs via RPC
-      const { data, error } = await auditLogSupabase.rpc('delete_all_audit_logs');
-
-      if (error) {
-        logDetailedError('AuditLog.deleteAll', error, {});
-        return res.status(400).json({ success: false, error: error.message || 'Gagal menghapus semua log' });
-      }
-
-      const deletedCount = data?.[0]?.deleted_count || 0;
-      return res.json({ success: true, data: { deletedCount } });
-    }
-  } catch (err) {
-    logDetailedError('AuditLog.delete.endpoint', err, {});
     return res.status(500).json({ success: false, error: getClientErrorMessage('internal_error', 'internal_error') });
   }
 });
@@ -800,14 +723,11 @@ app.delete('/api/organization/departments/:id', async (req, res) => {
       return res.status(400).json({ success: false, error: getClientErrorMessage('delete_failed', 'Gagal menghapus departemen') });
     }
 
-    try {
-      const { error: _deptUpdateError } = await context.dbClient
-        .from('employees')
-        .update({ departemen: '' })
-        .eq('departemen', targetDept.nama);
-    } catch (e) {
-      // ignore
-    }
+    await context.dbClient
+      .from('employees')
+      .update({ departemen: '' })
+      .eq('departemen', targetDept.nama)
+      .catch(() => {});
 
     await invalidateOrganizationCaches();
     return res.json({ success: true, data: { id: req.params.id } });
@@ -875,24 +795,17 @@ app.delete('/api/organization/positions/:id', async (req, res) => {
       return res.status(404).json({ success: false, error: 'Jabatan tidak ditemukan' });
     }
 
-    const { error: employeeUpdateError } = await context.dbClient
-      .from('employees')
-      .update({ jabatan: '' })
-      .eq('jabatan', targetPos.nama);
-
-    if (employeeUpdateError) {
-      logDetailedError('Position.delete.employeeUnlink', employeeUpdateError, {
-        positionId: req.params.id,
-        positionName: targetPos.nama,
-      });
-      return res.status(400).json({ success: false, error: getClientErrorMessage('delete_failed', 'Gagal menghapus jabatan') });
-    }
-
     const { error } = await context.dbClient.from('positions').delete().eq('id', req.params.id);
     if (error) {
-      logDetailedError('Position.delete', error, { positionId: req.params.id, positionName: targetPos.nama });
+      logDetailedError('Position.delete', error, { positionId: req.params.id });
       return res.status(400).json({ success: false, error: getClientErrorMessage('delete_failed', 'Gagal menghapus jabatan') });
     }
+
+    await context.dbClient
+      .from('employees')
+      .update({ jabatan: '' })
+      .eq('jabatan', targetPos.nama)
+      .catch(() => {});
 
     await invalidateOrganizationCaches();
     return res.json({ success: true, data: { id: req.params.id } });
@@ -942,6 +855,41 @@ app.post('/api/attendance-change-requests/bulk', async (req, res) => {
   }
 });
 
+// ── Audit Log Cleanup (Admin only) ──
+app.delete('/api/audit-logs', async (req, res) => {
+  try {
+    const context = await getRequesterContext(req);
+    if (!context.ok) {
+      return res.status(context.status).json({ success: false, error: context.error });
+    }
+
+    if (!canManageOrganizationRole(context.role)) {
+      return res.status(403).json({ success: false, error: 'Hanya admin yang dapat menghapus audit log' });
+    }
+
+    const { mode = 'all', days = 90 } = req.body || {};
+
+    if (mode === 'old') {
+      const { error } = await context.dbClient.rpc('cleanup_old_audit_logs', { days_old: days });
+      if (error) {
+        logDetailedError('AuditLog.cleanup', error, { days });
+        return res.status(400).json({ success: false, error: getClientErrorMessage('delete_failed', 'Gagal membersihkan audit log lama') });
+      }
+      return res.json({ success: true, data: { deletedCount: 0 } });
+    } else {
+      const { error } = await context.dbClient.rpc('delete_all_audit_logs');
+      if (error) {
+        logDetailedError('AuditLog.deleteAll', error, {});
+        return res.status(400).json({ success: false, error: getClientErrorMessage('delete_failed', 'Gagal menghapus semua audit log') });
+      }
+      return res.json({ success: true, data: { deletedCount: 0 } });
+    }
+  } catch (err) {
+    logDetailedError('AuditLog.delete.endpoint', err, {});
+    return res.status(500).json({ success: false, error: getClientErrorMessage('internal_error', 'internal_error') });
+  }
+});
+
 // ── Cache invalidation endpoint (internal) ──
 app.post('/api/cache/invalidate', async (req, res) => {
   try {
@@ -982,11 +930,7 @@ app.use((err, req, res, next) => {
   res.status(500).json({ error: IS_PROD ? 'Internal server error' : err.message });
 });
 
-// ── Start (skip listen in Vercel serverless environment) ──
-if (!process.env.VERCEL) {
-  app.listen(PORT, () => {
-    console.log(`HRMS Pro server running on port ${PORT} [${IS_PROD ? 'PRODUCTION' : 'DEVELOPMENT'}]`);
-  });
-}
-
-export default app;
+// ── Start ──
+app.listen(PORT, () => {
+  console.log(`HRMS Pro server running on port ${PORT} [${IS_PROD ? 'PRODUCTION' : 'DEVELOPMENT'}]`);
+});

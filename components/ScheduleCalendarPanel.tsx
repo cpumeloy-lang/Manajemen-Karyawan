@@ -8,7 +8,6 @@ import {
 import { CalendarDaysIcon, ClockIcon, UserGroupIcon } from './icons.tsx';
 import LoadingSpinner from './LoadingSpinner.tsx';
 import { useConfirm } from './ConfirmDialog.tsx';
-import { classifyError } from '../services/errorHandlingService.ts';
 
 const COLOR_CLASSES: Record<ShiftColor, string> = {
     yellow: 'bg-yellow-100 text-yellow-800 border-yellow-300',
@@ -93,7 +92,7 @@ const ScheduleCalendarPanel: React.FC<ScheduleCalendarPanelProps> = ({
             setPatterns(patternData);
             setSummary(summaryData);
         } catch (err: any) {
-            onNotify('error', classifyError(err).userMessage);
+            onNotify('error', `Gagal memuat jadwal: ${err.message}`);
         } finally {
             setLoading(false);
         }
@@ -133,7 +132,7 @@ const ScheduleCalendarPanel: React.FC<ScheduleCalendarPanelProps> = ({
             setShowGenerateModal(false);
             await loadData();
         } catch (err: any) {
-            onNotify('error', classifyError(err).userMessage);
+            onNotify('error', `Gagal generate: ${err.message}`);
         } finally {
             setGenerating(false);
         }
@@ -158,7 +157,7 @@ const ScheduleCalendarPanel: React.FC<ScheduleCalendarPanelProps> = ({
             onNotify('success', `${count} jadwal berhasil dipublikasi.`);
             await loadData();
         } catch (err: any) {
-            onNotify('error', classifyError(err).userMessage);
+            onNotify('error', `Gagal publish: ${err.message}`);
         } finally {
             setPublishing(false);
         }

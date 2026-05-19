@@ -12,7 +12,6 @@
  */
 
 import { supabase } from './supabaseClient';
-import { classifyError } from './errorHandlingService';
 
 // ---------------------------------------------------------------------------
 // Config
@@ -241,8 +240,8 @@ export async function syncAttendanceToSupabase(
       synced++;
     } catch (err: unknown) {
       failed++;
-      const appErr = classifyError(err);
-      errors.push(`[${event.employeeNoString}] ${appErr.userMessage}`);
+      const msg = err instanceof Error ? err.message : String(err);
+      errors.push(`[${event.employeeNoString}] ${msg}`);
       console.error('Hikvision sync error:', err);
     }
   }
@@ -283,12 +282,12 @@ export async function runHikvisionSync(
       lastSyncTime: now.toISOString(),
     };
   } catch (err: unknown) {
-    const appErr = classifyError(err);
+    const msg = err instanceof Error ? err.message : String(err);
     return {
       success: false,
       synced: 0,
       failed: 0,
-      errors: [appErr.userMessage],
+      errors: [msg],
       lastSyncTime: now.toISOString(),
     };
   }
@@ -353,7 +352,7 @@ export async function testHikvisionConnection(
     const data = await response.json();
     return { connected: true, deviceInfo: data?.DeviceInfo ?? data };
   } catch (err: unknown) {
-    const appErr = classifyError(err);
-    return { connected: false, error: appErr.userMessage };
+    const msg = err instanceof Error ? err.message : String(err);
+    return { connected: false, error: msg };
   }
 }
