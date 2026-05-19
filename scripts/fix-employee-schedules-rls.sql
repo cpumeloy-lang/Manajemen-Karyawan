@@ -3,9 +3,17 @@
 -- Run this in Supabase SQL Editor to fix 406 Not Acceptable errors
 -- ============================================================================
 
--- Drop existing policies first
+-- Drop ALL existing policies first
 DROP POLICY IF EXISTS "Users can view their own schedules" ON public.employee_schedules;
 DROP POLICY IF EXISTS "Admin/HRD can view all schedules" ON public.employee_schedules;
+DROP POLICY IF EXISTS "Kepala Ruangan can view unit schedules" ON public.employee_schedules;
+DROP POLICY IF EXISTS "Admin/HRD can insert schedules" ON public.employee_schedules;
+DROP POLICY IF EXISTS "Admin/HRD can update schedules" ON public.employee_schedules;
+DROP POLICY IF EXISTS "Admin can delete schedules" ON public.employee_schedules;
+DROP POLICY IF EXISTS "employee_schedules_select" ON public.employee_schedules;
+DROP POLICY IF EXISTS "employee_schedules_insert" ON public.employee_schedules;
+DROP POLICY IF EXISTS "employee_schedules_update" ON public.employee_schedules;
+DROP POLICY IF EXISTS "employee_schedules_delete" ON public.employee_schedules;
 
 -- Create new RLS policies
 -- Policy 1: Users can view their own schedules
