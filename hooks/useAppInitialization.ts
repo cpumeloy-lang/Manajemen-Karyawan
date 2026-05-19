@@ -4,7 +4,7 @@ import { authService } from '../services/AuthService';
 
 import { dataService } from '../services/DataService';
 
-import { Employee, Status, View } from '../types';
+import { Employee, Status } from '../types';
 
 import { useAuth, useAuthActions, useAppDataActions, useAppErrorActions, useUIActions } from '../stores/appStore';
 
@@ -130,7 +130,7 @@ export const useAppInitialization = () => {
 
   const { setError: setAppError, setIsDatabaseError } = useAppErrorActions();
 
-  const { setView, setActivePortal } = useUIActions();
+  const { setView } = useUIActions();
 
 
 
@@ -504,16 +504,7 @@ export const useAppInitialization = () => {
 
       setAuthUser({ id: session.user.id, email: session.user.email, profile });
 
-      // Restore saved portal and view from localStorage for persistence
-      try {
-        const savedPortal = localStorage.getItem('hrms_last_activePortal') as 'personal' | 'operational' | null;
-        const savedView = localStorage.getItem('hrms_last_view') as View | null;
-        if (savedPortal) setActivePortal(savedPortal);
-        if (savedView) setView(savedView);
-      } catch {
-        // Fallback to default if localStorage fails
-        setView('dashboard');
-      }
+      setView('dashboard');
 
 
 

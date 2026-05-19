@@ -7,6 +7,7 @@ import { createClient } from '@supabase/supabase-js';
 import loggingService from './services/loggingService.js';
 import { getRedisStats } from './services/redisAdapter.js';
 import dotenv from 'dotenv';
+import { Sentry } from './services/sentryService.js';
 
 import helmet from 'helmet';
 import cors from 'cors';
@@ -51,8 +52,15 @@ const invalidateEmployeeCaches = async (employee) => {
 };
 
 const invalidateOrganizationCaches = async () => {
-  // No-op for local development - Redis cache not configured
-  // In production with Redis, this would invalidate cache patterns
+  try {
+    const { getCache } = await import('./services/redisCache.js');
+    const cache = getCache();
+    await cache.invalidatePattern('employees:*');
+    await cache.invalidatePattern('organization:*');
+    await cache.invalidatePattern('units:*');
+  } catch (err) {
+    console.warn('Organization cache invalidation failed', err);
+  }
 };
 
 const getBearerToken = (req) => {
@@ -275,41 +283,65 @@ app.use(helmet({
 
 // ── CORS ──
 const ALLOWED_ORIGINS = (process.env.CORS_ORIGINS || '').split(',').filter(Boolean);
+
+// In production, CORS_ORIGINS must be set for security
+if (IS_PROD && ALLOWED_ORIGINS.length === 0) {
+  console.error('❌ CORS_ORIGINS environment variable must be set in production');
+  console.error('Set CORS_ORIGINS to a comma-separated list of allowed origins (e.g., https://yourdomain.com)');
+  process.exit(1);
+}
+
 app.use(cors({
-  origin: ALLOWED_ORIGINS.length > 0 ? ALLOWED_ORIGINS : true,
+  origin: ALLOWED_ORIGINS.length > 0 ? ALLOWED_ORIGINS : (IS_PROD ? false : true), // Only allow all in development
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
   maxAge: 86400,
 }));
 
-// ── Simple Rate Limiter (in-memory, per IP) ──
-const rateLimitMap = new Map();
+// ── Redis-based Rate Limiter (scalable for multi-instance) ──
 const RATE_LIMIT_WINDOW_MS = 60_000;
 const RATE_LIMIT_MAX = 120;
 
-app.use((req, res, next) => {
-  const ip = req.ip || req.socket.remoteAddress;
-  const now = Date.now();
-  const record = rateLimitMap.get(ip);
-  if (!record || now - record.start > RATE_LIMIT_WINDOW_MS) {
-    rateLimitMap.set(ip, { start: now, count: 1 });
-  } else {
+const redisRateLimiter = async (req, res, next) => {
+  try {
+    const { getCache } = await import('./services/redisCache.js');
+    const cache = getCache();
+    const ip = req.ip || req.socket.remoteAddress;
+    const key = `ratelimit:${ip}`;
+    const now = Date.now();
+
+    const current = await cache.get(key);
+    if (!current) {
+      // First request in window
+      await cache.set(key, { count: 1, start: now }, RATE_LIMIT_WINDOW_MS / 1000);
+      return next();
+    }
+
+    const record = current;
+    if (now - record.start > RATE_LIMIT_WINDOW_MS) {
+      // Window expired, reset
+      await cache.set(key, { count: 1, start: now }, RATE_LIMIT_WINDOW_MS / 1000);
+      return next();
+    }
+
     record.count++;
     if (record.count > RATE_LIMIT_MAX) {
-      res.setHeader('Retry-After', Math.ceil((record.start + RATE_LIMIT_WINDOW_MS - now) / 1000));
+      const retryAfter = Math.ceil((record.start + RATE_LIMIT_WINDOW_MS - now) / 1000);
+      await cache.set(key, record, retryAfter);
+      res.setHeader('Retry-After', retryAfter);
       return res.status(429).json({ error: 'Too many requests' });
     }
-  }
-  next();
-});
 
-// Clean up rate limit map periodically
-setInterval(() => {
-  const now = Date.now();
-  for (const [ip, record] of rateLimitMap) {
-    if (now - record.start > RATE_LIMIT_WINDOW_MS) rateLimitMap.delete(ip);
+    await cache.set(key, record, Math.ceil((record.start + RATE_LIMIT_WINDOW_MS - now) / 1000));
+    next();
+  } catch (err) {
+    // Fallback: allow request if Redis fails
+    console.warn('Redis rate limiter failed, allowing request', err);
+    next();
   }
-}, RATE_LIMIT_WINDOW_MS);
+};
+
+app.use(redisRateLimiter);
 
 // ── Request Logging ──
 app.use((req, res, next) => {
@@ -920,10 +952,35 @@ app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'dist', 'index.html'));
 });
 
-// ── Global error handler ──
+// ── Error Handling Middleware (Sentry + custom) ──
+if (process.env.SENTRY_DSN || process.env.VITE_SENTRY_DSN) {
+  app.use(Sentry.Handlers.errorHandler());
+}
+
 app.use((err, req, res, next) => {
-  console.error(`[ERROR] ${req.method} ${req.path}:`, err.message);
-  res.status(500).json({ error: IS_PROD ? 'Internal server error' : err.message });
+  console.error('Unhandled error:', err);
+  
+  // Log to logging service
+  try {
+    loggingService.error('Unhandled error', {
+      message: err.message,
+      stack: err.stack,
+      path: req.path,
+      method: req.method,
+    });
+  } catch (logErr) {
+    console.error('Failed to log error:', logErr);
+  }
+
+  // Send error response
+  const status = err.status || 500;
+  const message = IS_PROD ? 'Internal server error' : err.message;
+  
+  res.status(status).json({
+    success: false,
+    error: message,
+    ...(IS_PROD ? {} : { stack: err.stack }),
+  });
 });
 
 // ── Start ──
