@@ -18,7 +18,7 @@ const SESSION_CHECK_STUCK_MS = 15000;
 
 const SESSION_QUERY_TIMEOUT_MS = 12000;
 
-const normalizeRole = (role?: string | null) => (role || '').trim().toLowerCase();
+const normalizeRole = (role?: string | null) => String(role || '').trim().toLowerCase();
 
 const isOperationalRole = (role?: string | null) => {
 
