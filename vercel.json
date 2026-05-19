@@ -10,7 +10,7 @@
       "destination": "/server.js"
     },
     {
-      "source": "/(.*)",
+      "source": "/((?!api|assets|.*\\.js|.*\\.css|.*\\.png|.*\\.jpg|.*\\.jpeg|.*\\.gif|.*\\.svg|.*\\.ico|.*\\.woff|.*\\.woff2|.*\\.ttf|.*\\.eot).*)",
       "destination": "/index.html"
     }
   ],
