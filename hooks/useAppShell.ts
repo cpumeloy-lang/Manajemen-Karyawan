@@ -83,6 +83,17 @@ export const useAppShell = (): [AppShellState, AppShellActions] => {
     }
   }, [authUser, canAccessOperationalPortal, activePortal, setActivePortal, setView]);
 
+  // Save current view and portal to localStorage for persistence
+  useEffect(() => {
+    if (!authUser) return;
+    try {
+      localStorage.setItem('hrms_last_activePortal', activePortal || 'operational');
+      localStorage.setItem('hrms_last_view', view);
+    } catch {
+      // Ignore localStorage errors
+    }
+  }, [authUser, activePortal, view]);
+
   // Determine effective view based on portal and current view
   const effectiveView = useMemo<View>(() => {
     if (activePortal === 'personal') {
