@@ -42,7 +42,7 @@ export const useOrganizationHandlers = () => {
 
       // Client-side validation for duplicates and empty names
       const isDuplicate = workUnits?.some(
-        (u) => u.nama.toLowerCase() === unit.nama.toLowerCase() && u.id !== unit.id
+        (u) => String(u.nama || '').toLowerCase() === String(unit.nama || '').toLowerCase() && u.id !== unit.id
       );
       if (isDuplicate) {
         showError('Nama unit kerja sudah ada', `Unit kerja dengan nama "${unit.nama}" sudah terdaftar.`);
@@ -155,7 +155,7 @@ export const useOrganizationHandlers = () => {
 
       // Client-side validation for duplicates and empty names
       const isDuplicate = departments?.some(
-        (d) => d.nama.toLowerCase() === dept.nama.toLowerCase() && d.id !== dept.id
+        (d) => String(d.nama || '').toLowerCase() === String(dept.nama || '').toLowerCase() && d.id !== dept.id
       );
       if (isDuplicate) {
         showError('Nama departemen sudah ada', `Departemen dengan nama "${dept.nama}" sudah terdaftar.`);
@@ -269,7 +269,7 @@ export const useOrganizationHandlers = () => {
 
       // Client-side validation for duplicates and empty names
       const isDuplicate = positions?.some(
-        (p) => p.nama.toLowerCase() === position.nama.toLowerCase() && p.id !== position.id
+        (p) => String(p.nama || '').toLowerCase() === String(position.nama || '').toLowerCase() && p.id !== position.id
       );
       if (isDuplicate) {
         showError('Nama jabatan sudah ada', `Jabatan dengan nama "${position.nama}" sudah terdaftar.`);

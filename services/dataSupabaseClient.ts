@@ -34,7 +34,7 @@ if (configuredDataUrl && configuredDataUrl.includes('<IP_KOMPUTER_SERVER>')) {
 
 const dataSupabaseUrl =
 
-  configuredDataUrl.toLowerCase() === 'auto'
+  (configuredDataUrl && typeof configuredDataUrl === 'string' && configuredDataUrl.toLowerCase() === 'auto')
 
     ? `${window.location.protocol}//${window.location.hostname}:54321`
 
@@ -64,7 +64,7 @@ if (!dataSupabaseUrl || !dataSupabaseKey) {
 
   console.log('🗄️  Purpose: Operational Data (Employees, Units, Attendance, etc.)');
 
-  console.log(configuredDataUrl.toLowerCase() === 'auto' ? '🐳 Environment: Local auto mode (Port 54321)' : '☁️ Environment: Hosted Supabase');
+  console.log((configuredDataUrl && typeof configuredDataUrl === 'string' && configuredDataUrl.toLowerCase() === 'auto') ? '🐳 Environment: Local auto mode (Port 54321)' : '☁️ Environment: Hosted Supabase');
 
 }
 
