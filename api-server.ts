@@ -8,6 +8,7 @@ import express, { Request, Response, Express } from 'express';
 import cors from 'cors';
 import { createClient } from '@supabase/supabase-js';
 import { initAuthMiddleware, authMiddleware, requireAuth, requireRole, requirePermission, errorMiddleware } from './middleware/authMiddleware';
+import loggingService from './services/loggingService.js';
 
 const app: Express = express();
 const PORT = process.env.PORT || 3000;
@@ -47,7 +48,7 @@ const getClientErrorMessage = (errorType: string, fallback: string = 'Operation 
  * Preserves full error details for debugging
  */
 const logDetailedError = (context: string, error: any, details: Record<string, any> = {}): void => {
-  console.error(`[${context}]`, {
+  loggingService.error(`[${context}]`, {
     error: error?.message || String(error),
     code: error?.code,
     status: error?.status,
@@ -92,10 +93,10 @@ async function sendExpoPush(
     });
     if (!res.ok) {
       const text = await res.text().catch(() => '');
-      console.warn('[push.send] non-200', res.status, text.slice(0, 200));
+      loggingService.warn('[push.send] non-200', { status: res.status, response: text.slice(0, 200) });
     }
   } catch (err: any) {
-    console.warn('[push.send] error', err?.message || err);
+    loggingService.warn('[push.send] error', { error: err?.message || err });
   }
 }
 
@@ -204,10 +205,10 @@ app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
 // Request logging
 app.use((req: Request, res: Response, next) => {
-  console.log(`[${new Date().toISOString()}] ${req.method} ${req.path}`);
-  if (req.user) {
-    console.log(`  User: ${req.user.email} (${req.user.role})`);
-  }
+  loggingService.info(`${req.method} ${req.path}`, { 
+    user: req.user?.email, 
+    role: req.user?.role 
+  });
   next();
 });
 
@@ -289,7 +290,7 @@ app.get('/api/employees',
         });
       }
 
-      console.log(`✅ Fetching employees page ${page} (limit ${limit}) for: ${req.user?.email}`);
+      loggingService.info(`Fetching employees page ${page} (limit ${limit})`, { user: req.user?.email });
       res.json({
         success: true,
         message: 'Employees retrieved',
@@ -329,7 +330,7 @@ app.get('/api/employees/:id',
         });
       }
 
-      console.log('✅ Fetching employee:', req.params.id);
+      loggingService.info('Fetching employee', { employeeId: req.params.id });
       res.json({
         success: true,
         message: 'Employee retrieved',
@@ -380,7 +381,7 @@ app.post('/api/employees',
         });
       }
 
-      console.log('✅ Creating new employee');
+      loggingService.info('Creating new employee', { user: req.user?.email });
       res.status(201).json({
         success: true,
         message: 'Employee created',
@@ -444,7 +445,7 @@ app.put('/api/employees/:id',
         });
       }
 
-      console.log('✅ Updating employee:', req.params.id);
+      loggingService.info('Updating employee', { employeeId: req.params.id });
       res.json({
         success: true,
         message: 'Employee updated',
@@ -487,7 +488,7 @@ app.delete('/api/employees/:id',
         });
       }
 
-      console.log('✅ Deleting employee:', req.params.id);
+      loggingService.info('Deleting employee', { employeeId: req.params.id });
       res.json({
         success: true,
         message: 'Employee deleted',
@@ -518,26 +519,62 @@ app.get('/api/attendance',
         });
       }
 
-      const { data, error } = await adminSupabase
-        .from('attendance')
-        .select('*')
+      // Parse pagination params
+      const page = Math.max(1, parseInt(String(req.query.page || '1'), 10));
+      const limit = Math.max(1, Math.min(100, parseInt(String(req.query.limit || '20'), 10)));
+      const offset = (page - 1) * limit;
+
+      // Parse filter params
+      const startDate = req.query.startDate as string | undefined;
+      const endDate = req.query.endDate as string | undefined;
+      const employeeId = req.query.employeeId as string | undefined;
+
+      // Build query
+      let query = adminSupabase.from('attendance').select('*', { count: 'exact' });
+
+      if (startDate) {
+        query = query.gte('tanggal', startDate);
+      }
+
+      if (endDate) {
+        query = query.lte('tanggal', endDate);
+      }
+
+      if (employeeId) {
+        query = query.eq('employeeId', employeeId);
+      }
+
+      // Apply sorting and pagination
+      const { data, error, count } = await query
         .order('tanggal', { ascending: false })
-        .limit(200);
+        .order('clockIn', { ascending: false })
+        .range(offset, offset + limit - 1);
 
       if (error) {
-        logDetailedError('Attendance.list', error);
+        logDetailedError('Attendance.list', error, { page, limit, startDate, endDate, employeeId });
         return res.status(400).json({
           success: false,
           error: getClientErrorMessage('fetch_failed', 'Operation failed'),
         });
       }
 
-      // Admin/HRD can view all, kepala_ruangan their unit, karyawan only own
-      console.log('✅ Fetching attendance for:', req.user?.email);
+      loggingService.info('Fetching attendance records', { 
+        user: req.user?.email, 
+        page, 
+        limit,
+        total: count || 0 
+      });
+      
       res.json({
         success: true,
         message: 'Attendance records retrieved',
-        data,
+        data: data || [],
+        pagination: {
+          page,
+          limit,
+          total: count || 0,
+          totalPages: Math.ceil((count || 0) / limit),
+        },
       });
     } catch (error: any) {
       logDetailedError('Attendance.list.endpoint', error);
@@ -584,7 +621,7 @@ app.post('/api/attendance',
         });
       }
 
-      console.log('✅ Recording attendance');
+      loggingService.info('Recording attendance', { user: req.user?.email });
       res.status(201).json({
         success: true,
         message: 'Attendance recorded',
@@ -616,25 +653,61 @@ app.get('/api/requests',
         });
       }
 
-      const { data, error } = await adminSupabase
-        .from('requests')
-        .select('*')
+      // Parse pagination params
+      const page = Math.max(1, parseInt(String(req.query.page || '1'), 10));
+      const limit = Math.max(1, Math.min(100, parseInt(String(req.query.limit || '20'), 10)));
+      const offset = (page - 1) * limit;
+
+      // Parse filter params
+      const status = req.query.status as string | undefined;
+      const type = req.query.type as string | undefined;
+      const employeeId = req.query.employeeId as string | undefined;
+
+      // Build query
+      let query = adminSupabase.from('requests').select('*', { count: 'exact' });
+
+      if (status) {
+        query = query.eq('status', status);
+      }
+
+      if (type) {
+        query = query.eq('request_type', type);
+      }
+
+      if (employeeId) {
+        query = query.eq('employeeId', employeeId);
+      }
+
+      // Apply sorting and pagination
+      const { data, error, count } = await query
         .order('created_at', { ascending: false })
-        .limit(200);
+        .range(offset, offset + limit - 1);
 
       if (error) {
-        logDetailedError('Request.list', error);
+        logDetailedError('Request.list', error, { page, limit, status, type, employeeId });
         return res.status(400).json({
           success: false,
           error: getClientErrorMessage('fetch_failed', 'Operation failed'),
         });
       }
 
-      console.log('✅ Fetching requests');
+      loggingService.info('Fetching requests', { 
+        user: req.user?.email, 
+        page, 
+        limit,
+        total: count || 0 
+      });
+      
       res.json({
         success: true,
         message: 'Requests retrieved',
-        data,
+        data: data || [],
+        pagination: {
+          page,
+          limit,
+          total: count || 0,
+          totalPages: Math.ceil((count || 0) / limit),
+        },
       });
     } catch (error: any) {
       logDetailedError('Request.list.endpoint', error);
@@ -674,7 +747,7 @@ app.post('/api/requests/:id/approve',
         });
       }
 
-      console.log('✅ Approving request:', req.params.id);
+      loggingService.info('Approving request', { requestId: req.params.id });
 
       // Push notification (best-effort, non-blocking).
       void (async () => {
@@ -732,7 +805,7 @@ app.post('/api/requests/:id/reject',
         });
       }
 
-      console.log('✅ Rejecting request:', req.params.id);
+      loggingService.info('Rejecting request', { requestId: req.params.id });
 
       // Push notification (best-effort, non-blocking).
       void (async () => {
@@ -780,12 +853,16 @@ app.get('/api/payroll',
       }
 
       // Parse query params
+      const page = Math.max(1, parseInt(String(req.query.page || '1'), 10));
+      const limit = Math.max(1, Math.min(100, parseInt(String(req.query.limit || '20'), 10)));
+      const offset = (page - 1) * limit;
+
       const month = req.query.month as string | undefined; // Format: "2025-05"
       const employeeId = req.query.employeeId as string | undefined;
       const status = req.query.status as string | undefined; // e.g., "processed", "pending"
 
       // Build query
-      let query = adminSupabase.from('payroll').select('*');
+      let query = adminSupabase.from('payroll').select('*', { count: 'exact' });
 
       if (month) {
         // Assuming payroll table has period_start or month column
@@ -801,19 +878,25 @@ app.get('/api/payroll',
         query = query.eq('status', status);
       }
 
-      const { data, error } = await query
+      const { data, error, count } = await query
         .order('periode', { ascending: false })
-        .limit(200);
+        .range(offset, offset + limit - 1);
 
       if (error) {
         // Check if table doesn't exist - return empty list gracefully
         if (error.message?.includes('relation') || error.message?.includes('does not exist')) {
-          console.warn('⚠️  Payroll table not found, returning empty list');
+          loggingService.warn('Payroll table not found, returning empty list');
           return res.json({
             success: true,
             message: 'Payroll data retrieved (table not yet created)',
             data: [],
             note: 'Payroll table needs to be created via database migration',
+            pagination: {
+              page,
+              limit,
+              total: 0,
+              totalPages: 0,
+            },
           });
         }
 
@@ -824,7 +907,15 @@ app.get('/api/payroll',
         });
       }
 
-      console.log(`✅ Fetching payroll data (month: ${month}, employee: ${employeeId})`);
+      loggingService.info('Fetching payroll data', { 
+        user: req.user?.email, 
+        month, 
+        employeeId,
+        page, 
+        limit,
+        total: count || 0 
+      });
+      
       res.json({
         success: true,
         message: 'Payroll data retrieved',
@@ -833,6 +924,12 @@ app.get('/api/payroll',
           month: month || 'all',
           employeeId: employeeId || 'all',
           status: status || 'all',
+        },
+        pagination: {
+          page,
+          limit,
+          total: count || 0,
+          totalPages: Math.ceil((count || 0) / limit),
         },
       });
     } catch (error: any) {
@@ -855,7 +952,7 @@ app.get('/api/admin/rbac',
   requireRole('admin'),
   async (req: Request, res: Response) => {
     try {
-      console.log('✅ Fetching RBAC configuration');
+      loggingService.info('Fetching RBAC configuration', { user: req.user?.email });
       res.json({
         success: true,
         message: 'RBAC configuration retrieved',
@@ -939,7 +1036,7 @@ app.post('/api/admin/rbac/update-role',
         });
       }
 
-      console.log(`✅ Updating role for ${userId} to ${normalizedRole}`);
+      loggingService.info('Updating role', { userId, newRole: normalizedRole });
       res.json({
         success: true,
         message: 'Role updated successfully',
