@@ -6,9 +6,12 @@ import { createGzip } from 'zlib';
 import { createClient } from '@supabase/supabase-js';
 import loggingService from './services/loggingService.js';
 import { getRedisStats } from './services/redisAdapter.js';
+import dotenv from 'dotenv';
 
 import helmet from 'helmet';
 import cors from 'cors';
+
+dotenv.config();
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
