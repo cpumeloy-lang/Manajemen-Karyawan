@@ -39,8 +39,8 @@ CREATE POLICY "Kepala Ruangan can view unit schedules"
       AND user_id = auth.uid() 
       AND role = 'kepala_ruangan'
       AND unit_id IN (
-        SELECT id FROM public.units WHERE managed_by = (
-          SELECT id FROM public.employees WHERE user_id = auth.uid()
+        SELECT id FROM public.units WHERE id = (
+          SELECT unitKerjaId FROM public.employees WHERE user_id = auth.uid()
         )
       )
     )
