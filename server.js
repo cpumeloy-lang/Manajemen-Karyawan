@@ -47,7 +47,7 @@ const invalidateEmployeeCaches = async (employee) => {
       await cache.invalidateUser(identifier);
     }
   } catch (err) {
-    console.warn('Employee cache invalidation failed', err);
+    loggingService.warn('Employee cache invalidation failed', { error: err.message });
   }
 };
 
@@ -59,7 +59,7 @@ const invalidateOrganizationCaches = async () => {
     await cache.invalidatePattern('organization:*');
     await cache.invalidatePattern('units:*');
   } catch (err) {
-    console.warn('Organization cache invalidation failed', err);
+    loggingService.warn('Organization cache invalidation failed', { error: err.message });
   }
 };
 
@@ -137,7 +137,7 @@ const logDetailedError = (context, error, details = {}) => {
       details,
     });
   } catch (e) {
-    console.error(`[${context}] Logging failed:`, e?.message);
+    loggingService.error(`[${context}] Logging failed`, { error: e?.message });
   }
 };
 const canManageOperationalRequestsRole = (role) => role === 'admin' || role === 'hrd' || role === 'kepala_ruangan';
@@ -335,8 +335,7 @@ const redisRateLimiter = async (req, res, next) => {
     await cache.set(key, record, Math.ceil((record.start + RATE_LIMIT_WINDOW_MS - now) / 1000));
     next();
   } catch (err) {
-    // Fallback: allow request if Redis fails
-    console.warn('Redis rate limiter failed, allowing request', err);
+    loggingService.warn('Redis rate limiter failed, allowing request', { error: err.message });
     next();
   }
 };
@@ -355,8 +354,7 @@ app.use((req, res, next) => {
       else if (!IS_PROD) loggingService.info(msg, { status: res.statusCode, duration });
       // In production we avoid noisy info logs
     } catch (err) {
-      // fallback
-      console.log(msg);
+      loggingService.warn(msg, { error: err.message });
     }
   });
   next();
@@ -495,7 +493,7 @@ app.post('/api/employees', async (req, res) => {
 
       const { error: docError } = await context.dbClient.from('documents').insert(docsToInsert);
       if (docError) {
-        console.warn('Document insert failed after employee creation', docError);
+        loggingService.warn('Document insert failed after employee creation', { error: docError.message });
       }
     }
 
@@ -926,7 +924,7 @@ app.post('/api/cache/invalidate', async (req, res) => {
 
     // Require INTERNAL_API_KEY to be configured for this endpoint to work
     if (!configured) {
-      console.error('Cache invalidate attempted but INTERNAL_API_KEY not configured');
+      loggingService.error('Cache invalidate attempted but INTERNAL_API_KEY not configured');
       return res.status(503).json({ error: 'internal_api_not_enabled' });
     }
 
@@ -941,7 +939,7 @@ app.post('/api/cache/invalidate', async (req, res) => {
     if (userId) await cache.invalidateUser(userId);
     return res.json({ success: true });
   } catch (err) {
-    console.error('Cache invalidate API error', err);
+    loggingService.error('Cache invalidate API error', { error: err.message });
     return res.status(500).json({ error: 'internal_error' });
   }
 });

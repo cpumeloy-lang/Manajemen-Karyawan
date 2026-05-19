@@ -1,5 +1,6 @@
 // Redis caching layer using singleton client from services/redisClient.js
 import { getRedisClient } from './redisClient.js';
+import loggingService from './loggingService.js';
 
 export interface CacheConfig {
   host: string;
@@ -32,7 +33,7 @@ export class RedisCache {
       const data = await client.get(key);
       return data ? JSON.parse(data) : null;
     } catch (err) {
-      console.error('Redis GET error', err);
+      loggingService.error('Redis GET error', { error: err.message });
       return null;
     }
   }
@@ -44,7 +45,7 @@ export class RedisCache {
       if (ttlSeconds) await client.set(key, serialized, { EX: ttlSeconds });
       else await client.set(key, serialized);
     } catch (err) {
-      console.error('Redis SET error', err);
+      loggingService.error('Redis SET error', { error: err.message });
     }
   }
 
@@ -53,7 +54,7 @@ export class RedisCache {
       const client = await getRedisClient();
       await client.del(key);
     } catch (err) {
-      console.error('Redis DEL error', err);
+      loggingService.error('Redis DEL error', { error: err.message });
     }
   }
 
@@ -63,7 +64,7 @@ export class RedisCache {
       const r = await client.exists(key);
       return r === 1;
     } catch (err) {
-      console.error('Redis EXISTS error', err);
+      loggingService.error('Redis EXISTS error', { error: err.message });
       return false;
     }
   }

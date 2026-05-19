@@ -8,6 +8,7 @@
 
 import { dataSupabase } from './dataSupabaseClient';
 import rbacService, { RBACUser, PermissionCheck } from './rbacService';
+import loggingService from './loggingService.js';
 
 export interface SecureDataResponse<T = any> {
   success: boolean;
@@ -208,7 +209,7 @@ class SecureDataService {
       }
 
       // Log RBAC action
-      console.log(`✅ [RBAC] User ${userContext.email} created employee:`, data.id);
+      loggingService.info(`[RBAC] User ${userContext.email} created employee:`, { employeeId: data.id });
 
       // Invalidate related caches
       try {
@@ -217,7 +218,7 @@ class SecureDataService {
         await cache.invalidatePattern('employees:*');
         if (data && data.id) await cache.invalidateUser(data.id);
       } catch (err) {
-        console.warn('Cache invalidation failed after createEmployeeSecure', err);
+        loggingService.warn('Cache invalidation failed after createEmployeeSecure', { error: err.message });
       }
 
       return {
@@ -314,7 +315,7 @@ class SecureDataService {
         };
       }
 
-      console.log(`✅ [RBAC] User ${userContext.email} updated employee:`, employeeId);
+      loggingService.info(`[RBAC] User ${userContext.email} updated employee:`, { employeeId });
 
       // Invalidate related caches
       try {
@@ -323,7 +324,7 @@ class SecureDataService {
         await cache.invalidatePattern('employees:*');
         await cache.invalidateUser(employeeId);
       } catch (err) {
-        console.warn('Cache invalidation failed after updateEmployeeSecure', err);
+        loggingService.warn('Cache invalidation failed after updateEmployeeSecure', { error: err.message });
       }
 
       return {
@@ -399,7 +400,7 @@ class SecureDataService {
         };
       }
 
-      console.log(`✅ [RBAC] User ${userContext.email} deleted employee:`, employeeId);
+      loggingService.info(`[RBAC] User ${userContext.email} deleted employee:`, { employeeId });
 
       // Invalidate related caches
       try {
@@ -408,7 +409,7 @@ class SecureDataService {
         await cache.invalidatePattern('employees:*');
         await cache.invalidateUser(employeeId);
       } catch (err) {
-        console.warn('Cache invalidation failed after deleteEmployeeSecure', err);
+        loggingService.warn('Cache invalidation failed after deleteEmployeeSecure', { error: err.message });
       }
 
       return {
@@ -572,7 +573,7 @@ class SecureDataService {
         };
       }
 
-      console.log(`✅ [RBAC] User ${userContext.email} approved request:`, requestId);
+      loggingService.info(`[RBAC] User ${userContext.email} approved request:`, { requestId });
 
       return {
         success: true,
