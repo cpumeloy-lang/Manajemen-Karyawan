@@ -190,7 +190,7 @@ const EmployeeAttendanceDetail: React.FC<EmployeeAttendanceDetailProps> = ({ emp
     }, [personalRevisionHistory]);
 
     const filteredRevisionHistory = useMemo(() => {
-        const normalizedSearch = revisionSearchTerm.trim().toLowerCase();
+        const normalizedSearch = String(revisionSearchTerm || '').trim().toLowerCase();
 
         return personalRevisionHistory
             .filter((item) => revisionActionFilter === 'ALL' || item.action === revisionActionFilter)

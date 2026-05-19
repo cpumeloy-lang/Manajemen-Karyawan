@@ -443,7 +443,7 @@ const AttendanceManagement: React.FC<AttendanceManagementProps> = ({
     }, [scopedRevisionHistory]);
 
     const filteredRevisionHistory = useMemo(() => {
-        const normalizedSearch = revisionSearchTerm.trim().toLowerCase();
+        const normalizedSearch = String(revisionSearchTerm || '').trim().toLowerCase();
 
         return scopedRevisionHistory
             .filter((item) => revisionActionFilter === 'ALL' || item.action === revisionActionFilter)
