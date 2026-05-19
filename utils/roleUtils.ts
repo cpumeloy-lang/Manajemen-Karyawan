@@ -4,7 +4,7 @@
  */
 
 const normalizeRole = (role?: string | null): string =>
-  (role || '').trim().toLowerCase();
+  String(role || '').trim().toLowerCase();
 
 export const isAdminRole = (role?: string | null): boolean =>
   normalizeRole(role) === 'admin';
