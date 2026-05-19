@@ -51,15 +51,8 @@ const invalidateEmployeeCaches = async (employee) => {
 };
 
 const invalidateOrganizationCaches = async () => {
-  try {
-    const { getCache } = await import('./services/redisCache.js');
-    const cache = getCache();
-    await cache.invalidatePattern('employees:*');
-    await cache.invalidatePattern('organization:*');
-    await cache.invalidatePattern('units:*');
-  } catch (err) {
-    console.warn('Organization cache invalidation failed', err);
-  }
+  // No-op for local development - Redis cache not configured
+  // In production with Redis, this would invalidate cache patterns
 };
 
 const getBearerToken = (req) => {
