@@ -238,7 +238,7 @@ const normalizeEmployeeUpdateData = (updateData) => pick(updateData, [
 ]);
 
 const normalizeUnitData = (unit) => pick(unit, ['id', 'nama', 'shifts', 'shift_assignments']);
-const normalizeSimpleNameEntity = (entity) => pick(entity, ['id', 'nama']);
+const normalizeSimpleNameEntity = (entity) => pick(entity, ['nama']);
 const normalizeAttendanceData = (attendance) => pick(attendance, [
   'employeeId',
   'tanggal',
