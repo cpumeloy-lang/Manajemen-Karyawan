@@ -20,7 +20,17 @@ export const getRedisClient = async () => {
     if (client && client.isOpen) return client;
   }
 
-  client = createClient({ url: REDIS_URL, password: process.env.REDIS_PASSWORD || undefined, disableOfflineQueue: true });
+  client = createClient({ 
+    url: REDIS_URL, 
+    password: process.env.REDIS_PASSWORD || undefined, 
+    disableOfflineQueue: true,
+    socket: {
+      reconnectStrategy: (retries) => {
+        if (retries >= 2) return new Error('Max retries reached, failing fast for Serverless');
+        return Math.min(retries * 50, 500);
+      }
+    }
+  });
   connecting = true;
   client.on('error', (err) => {
     loggingService.error('Redis client error', { error: err.message || err });
