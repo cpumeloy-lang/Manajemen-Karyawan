@@ -16,6 +16,7 @@
 
 
 
+import logger from './logger.ts';
 import { authSupabase } from './authSupabaseClient';
 
 
@@ -48,23 +49,17 @@ const dataSupabaseKey = import.meta.env.VITE_DATA_SUPABASE_ANON_KEY?.trim();
 
 if (!dataSupabaseUrl || !dataSupabaseKey) {
 
-  console.error('❌ Supabase Data configuration missing!');
-
-  console.error('VITE_DATA_SUPABASE_URL:', configuredDataUrl ? 'SET' : 'MISSING');
-
-  console.error('VITE_DATA_SUPABASE_ANON_KEY:', dataSupabaseKey ? 'SET' : 'MISSING');
-
-  console.error('Please set hosted Supabase URL/key (or use auto for local mode).');
+  logger.error('Supabase Data configuration missing!', undefined, {
+    url: configuredDataUrl ? 'SET' : 'MISSING',
+    key: dataSupabaseKey ? 'SET' : 'MISSING',
+  });
 
 } else {
 
-  console.log('✅ Supabase Data Client Initialized');
-
-  console.log('📍 URL:', dataSupabaseUrl);
-
-  console.log('🗄️  Purpose: Operational Data (Employees, Units, Attendance, etc.)');
-
-  console.log((configuredDataUrl && typeof configuredDataUrl === 'string' && configuredDataUrl.toLowerCase() === 'auto') ? '🐳 Environment: Local auto mode (Port 54321)' : '☁️ Environment: Hosted Supabase');
+  logger.info('Supabase Data Client Initialized', {
+    url: dataSupabaseUrl,
+    env: (configuredDataUrl && typeof configuredDataUrl === 'string' && configuredDataUrl.toLowerCase() === 'auto') ? 'local-auto' : 'hosted',
+  });
 
 }
 

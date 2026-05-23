@@ -4,13 +4,17 @@ import { fileURLToPath } from 'url';
 import { createReadStream, existsSync } from 'fs';
 import { createGzip } from 'zlib';
 import { createClient } from '@supabase/supabase-js';
-import loggingService from './services/loggingService.js';
-import { getRedisStats } from './services/redisAdapter.js';
+import loggingService from './server/services/loggingService.js';
+import { getRedisStats } from './server/services/redisAdapter.js';
 import dotenv from 'dotenv';
-import { Sentry } from './services/sentryService.js';
+import { Sentry } from './server/services/sentryService.js';
 
 import helmet from 'helmet';
 import cors from 'cors';
+import { setupSystemRoutes, setupMetricsRoute } from './server/routes/systemRoutes.js';
+import { setupEmployeeRoutes } from './server/routes/employeeRoutes.js';
+import { setupOrganizationRoutes } from './server/routes/organizationRoutes.js';
+import { setupOperationsRoutes } from './server/routes/operationsRoutes.js';
 
 dotenv.config();
 
@@ -23,7 +27,7 @@ const IS_PROD = process.env.NODE_ENV === 'production';
 
 const SUPABASE_URL = process.env.VITE_DATA_SUPABASE_URL || process.env.VITE_SUPABASE_URL || '';
 const SUPABASE_ANON_KEY = process.env.VITE_DATA_SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || '';
-const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_SERVICE_ROLE_KEY || '';
+const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 
 const publicSupabase = SUPABASE_URL && SUPABASE_ANON_KEY
   ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
@@ -39,7 +43,7 @@ const adminSupabase = SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY
 
 const invalidateEmployeeCaches = async (employee) => {
   try {
-    const { getCache } = await import('./services/redisCache.js');
+    const { getCache } = await import('./server/services/redisCache.js');
     const cache = getCache();
     await cache.invalidatePattern('employees:*');
     const identifiers = [employee?.user_id, employee?.id].filter(Boolean);
@@ -53,7 +57,7 @@ const invalidateEmployeeCaches = async (employee) => {
 
 const invalidateOrganizationCaches = async () => {
   try {
-    const { getCache } = await import('./services/redisCache.js');
+    const { getCache } = await import('./server/services/redisCache.js');
     const cache = getCache();
     await cache.invalidatePattern('employees:*');
     await cache.invalidatePattern('organization:*');
@@ -84,15 +88,12 @@ const getRequesterContext = async (req) => {
     return { ok: false, status: 401, error: 'Invalid or expired session' };
   }
 
-  // Use adminSupabase (bypasses RLS) if available, otherwise create
-  // a per-request authenticated client with the user's JWT token
-  let dbClient = adminSupabase;
-  if (!dbClient) {
-    dbClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-      auth: { persistSession: false, autoRefreshToken: false },
-      global: { headers: { Authorization: `Bearer ${token}` } },
-    });
-  }
+  // Create a per-request authenticated client with the user's JWT token
+  // to ensure Supabase Row Level Security (RLS) is strictly enforced.
+  const dbClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+    auth: { persistSession: false, autoRefreshToken: false },
+    global: { headers: { Authorization: `Bearer ${token}` } },
+  });
 
   const { data: employee, error: employeeError } = await dbClient
     .from('employees')
@@ -119,13 +120,22 @@ const canManageOrganizationRole = (role) => role === 'admin';
 
 // ── Error message helper ──
 const getClientErrorMessage = (errorType, fallback = 'Operation failed') => {
-  // Production: Always return generic message
-  // Dev: Can show more details if needed
+  const errorMap = {
+    auth_create_failed: 'Gagal membuat akun login, email mungkin sudah terdaftar.',
+    profile_save_failed: 'Gagal menyimpan profil karyawan, periksa data yang dimasukkan.',
+    delete_failed: 'Data gagal dihapus karena masih digunakan atau terhubung dengan data lain.',
+    cleanup_failed: 'Gagal membersihkan data terkait. Operasi dibatalkan.',
+    internal_error: 'Terjadi kesalahan sistem internal. Silakan hubungi administrator.',
+    request_save_failed: 'Gagal menyimpan pengajuan perubahan data.',
+    // [BE-M9] Adding explicit fallback mapping
+  };
+
+  // Production: Always return predefined mapped message or fallback
+  // Dev: Can return more detailed errors if needed
   if (IS_PROD) {
-    return fallback;
+    return errorMap[errorType] || fallback;
   }
-  // Dev mode can return the fallback or more detail
-  return fallback;
+  return errorMap[errorType] || fallback;
 };
 
 const logDetailedError = (context, error, details = {}) => {
@@ -153,7 +163,18 @@ const pick = (source, allowedKeys) => {
   return result;
 };
 
-const normalizeEmployeeData = (employeeData) => pick(employeeData, [
+const normalizeEmptyStringsToNull = (payload) => {
+  if (!payload || typeof payload !== 'object') return payload;
+
+  const normalized = {};
+  for (const [key, value] of Object.entries(payload)) {
+    normalized[key] = typeof value === 'string' && value.trim() === '' ? null : value;
+  }
+
+  return normalized;
+};
+
+const allowedEmployeeFields = [
   'user_id',
   'nik',
   'nama',
@@ -173,70 +194,48 @@ const normalizeEmployeeData = (employeeData) => pick(employeeData, [
   'nomorSTR',
   'tanggalKadaluarsaSTR',
   'unitKerjaId',
+  'unit_kerja_id',
   'sertifikasi',
   'kompetensi',
-  'compensation',
+  'gajiPokok',
+  'tunjanganProfesi',
+  'gaji_pokok',
+  'tunjangan_profesi',
   'ktpNumber',
+  'ktp_number',
   'npwp',
   'bpjsKesehatan',
+  'bpjs_kesehatan',
   'bpjsKetenagakerjaan',
+  'bpjs_ketenagakerjaan',
   'agama',
   'maritalStatus',
+  'marital_status',
   'dependents',
   'address',
   'emergencyContacts',
+  'emergency_contacts',
   'education',
   'workHistory',
+  'work_history',
   'bankAccount',
+  'bank_account',
   'isProfileCompleted',
+  'is_profile_completed',
   'isVerified',
+  'is_verified',
   'verifiedBy',
+  'verified_by',
   'verifiedAt',
+  'verified_at',
   'isLocked',
+  'is_locked',
   'managedUnitId',
-]);
+  'managed_unit_id'
+];
 
-const normalizeEmployeeUpdateData = (updateData) => pick(updateData, [
-  'nik',
-  'nama',
-  'foto',
-  'jabatan',
-  'departemen',
-  'email',
-  'telepon',
-  'hireDate',
-  'birthDate',
-  'status',
-  'shift',
-  'sisaCuti',
-  'role',
-  'spesialisasi',
-  'kredensial',
-  'nomorSTR',
-  'tanggalKadaluarsaSTR',
-  'unitKerjaId',
-  'sertifikasi',
-  'kompetensi',
-  'compensation',
-  'ktpNumber',
-  'npwp',
-  'bpjsKesehatan',
-  'bpjsKetenagakerjaan',
-  'agama',
-  'maritalStatus',
-  'dependents',
-  'address',
-  'emergencyContacts',
-  'education',
-  'workHistory',
-  'bankAccount',
-  'isProfileCompleted',
-  'isVerified',
-  'verifiedBy',
-  'verifiedAt',
-  'isLocked',
-  'managedUnitId',
-]);
+const normalizeEmployeeData = (employeeData) => normalizeEmptyStringsToNull(pick(employeeData, allowedEmployeeFields));
+const normalizeEmployeeUpdateData = (updateData) => normalizeEmptyStringsToNull(pick(updateData, allowedEmployeeFields));
 
 const normalizeUnitData = (unit) => pick(unit, ['id', 'nama', 'shifts', 'shift_assignments']);
 const normalizeSimpleNameEntity = (entity) => pick(entity, ['nama']);
@@ -304,35 +303,26 @@ const RATE_LIMIT_MAX = 120;
 
 const redisRateLimiter = async (req, res, next) => {
   try {
-    const { getCache } = await import('./services/redisCache.js');
+    const { getCache } = await import('./server/services/redisCache.js');
     const cache = getCache();
     const ip = req.ip || req.socket.remoteAddress;
     const key = `ratelimit:${ip}`;
-    const now = Date.now();
+    const windowSeconds = RATE_LIMIT_WINDOW_MS / 1000;
 
-    const current = await cache.get(key);
-    if (!current) {
-      // First request in window
-      await cache.set(key, { count: 1, start: now }, RATE_LIMIT_WINDOW_MS / 1000);
+    // [BE-M2] Use atomic INCR
+    const currentCount = await cache.incr(key);
+    
+    if (currentCount === 1) {
+      // First request in window, set expiration
+      await cache.expire(key, windowSeconds);
       return next();
     }
 
-    const record = current;
-    if (now - record.start > RATE_LIMIT_WINDOW_MS) {
-      // Window expired, reset
-      await cache.set(key, { count: 1, start: now }, RATE_LIMIT_WINDOW_MS / 1000);
-      return next();
-    }
-
-    record.count++;
-    if (record.count > RATE_LIMIT_MAX) {
-      const retryAfter = Math.ceil((record.start + RATE_LIMIT_WINDOW_MS - now) / 1000);
-      await cache.set(key, record, retryAfter);
-      res.setHeader('Retry-After', retryAfter);
+    if (currentCount > RATE_LIMIT_MAX) {
+      res.setHeader('Retry-After', windowSeconds);
       return res.status(429).json({ error: 'Too many requests' });
     }
 
-    await cache.set(key, record, Math.ceil((record.start + RATE_LIMIT_WINDOW_MS - now) / 1000));
     next();
   } catch (err) {
     loggingService.warn('Redis rate limiter failed, allowing request', { error: err.message });
@@ -377,607 +367,44 @@ app.use(express.static(path.join(__dirname, 'dist'), {
   }
 }));
 
-// ── Health check ──
-app.get('/api/health', async (req, res) => {
-  const health = {
-    status: 'healthy',
-    timestamp: new Date().toISOString(),
-    uptime: process.uptime(),
-    memoryUsage: process.memoryUsage().rss,
-    nodeVersion: process.version,
-    checks: {
-      database: 'unknown',
-      redis: 'unknown',
-    },
-  };
-
-  // Check database connection
-  try {
-    const { error } = await publicSupabase
-      .from('employees')
-      .select('id')
-      .limit(1);
-    
-    health.checks.database = error ? 'unhealthy' : 'healthy';
-    if (error) health.status = 'degraded';
-  } catch (err) {
-    health.checks.database = 'error';
-    health.status = 'degraded';
-  }
-
-  // Check Redis connection
-  try {
-    const { getCache } = await import('./services/redisCache.js');
-    const cache = getCache();
-    const testKey = 'health-check';
-    await cache.set(testKey, 'ok', 5);
-    const result = await cache.get(testKey);
-    health.checks.redis = result === 'ok' ? 'healthy' : 'unhealthy';
-    if (result !== 'ok') health.status = 'degraded';
-  } catch (err) {
-    health.checks.redis = 'error';
-    health.status = 'degraded';
-  }
-
-  const statusCode = health.status === 'healthy' ? 200 : 503;
-  res.status(statusCode).json(health);
-});
-
-// ── Prometheus metrics endpoint ──
-app.get('/metrics', async (req, res) => {
-  try {
-    const lines = [];
-    lines.push('# HELP node_process_uptime_seconds Process uptime in seconds');
-    lines.push('# TYPE node_process_uptime_seconds gauge');
-    lines.push(`node_process_uptime_seconds ${process.uptime()}`);
-    lines.push('# HELP node_memory_rss_bytes Resident set size in bytes');
-    lines.push('# TYPE node_memory_rss_bytes gauge');
-    lines.push(`node_memory_rss_bytes ${process.memoryUsage().rss}`);
-    lines.push('# HELP hrms_rate_limit_map_size Number of IPs tracked by rate limiter');
-    lines.push('# TYPE hrms_rate_limit_map_size gauge');
-    lines.push(`hrms_rate_limit_map_size ${rateLimitMap.size}`);
-    // Append Redis stats if available
-    const redisStats = await getRedisStats().catch(() => null);
-    if (redisStats) {
-      lines.push('# HELP redis_connected_clients Number of connected Redis clients');
-      lines.push('# TYPE redis_connected_clients gauge');
-      lines.push(`redis_connected_clients ${redisStats.connected_clients}`);
-      lines.push('# HELP redis_used_memory_bytes Redis used memory in bytes');
-      lines.push('# TYPE redis_used_memory_bytes gauge');
-      lines.push(`redis_used_memory_bytes ${redisStats.used_memory}`);
-      lines.push('# HELP redis_keyspace_hits Redis keyspace hits');
-      lines.push('# TYPE redis_keyspace_hits gauge');
-      lines.push(`redis_keyspace_hits ${redisStats.keyspace_hits}`);
-      lines.push('# HELP redis_keyspace_misses Redis keyspace misses');
-      lines.push('# TYPE redis_keyspace_misses gauge');
-      lines.push(`redis_keyspace_misses ${redisStats.keyspace_misses}`);
-    }
-
-    res.setHeader('Content-Type', 'text/plain; version=0.0.4');
-    res.send(lines.join('\n'));
-  } catch (err) {
-    res.status(500).send('');
-  }
-});
+// ── System Routes (Health & Metrics & Cache) ──
+app.use('/api', setupSystemRoutes(publicSupabase));
+app.use(setupMetricsRoute(null));
 
 // ── Employee CRUD API ──
-app.post('/api/employees', async (req, res) => {
-  try {
-    const context = await getRequesterContext(req);
-    if (!context.ok) {
-      return res.status(context.status).json({ success: false, error: context.error });
-    }
-
-    if (!canManageEmployeesRole(context.role)) {
-      return res.status(403).json({ success: false, error: 'Hanya admin & HRD yang dapat membuat karyawan baru' });
-    }
-
-    const { employeeData, password, documents = [] } = req.body || {};
-    if (!employeeData || typeof employeeData !== 'object') {
-      return res.status(400).json({ success: false, error: 'employeeData is required' });
-    }
-
-    let userId = employeeData.user_id || employeeData.userId || null;
-
-    if (password && String(password).trim()) {
-      const authClient = adminSupabase || context.dbClient;
-      const { data: authData, error: authError } = await authClient.auth.admin.createUser({
-        email: employeeData.email,
-        password: String(password),
-        email_confirm: true,
-        user_metadata: {
-          name: employeeData.nama || employeeData.name || employeeData.email,
-        },
-      });
-
-      if (authError || !authData?.user) {
-        logDetailedError('Employee.create.auth', authError, { email: employeeData.email });
-        return res.status(400).json({ success: false, error: getClientErrorMessage('auth_create_failed', 'Gagal membuat akun login') });
-      }
-
-      userId = authData.user.id;
-    }
-
-    const profilePayload = normalizeEmployeeData(employeeData);
-    if (userId) {
-      profilePayload.user_id = userId;
-    }
-
-    const { data: newEmployee, error: profileError } = await context.dbClient
-      .from('employees')
-      .insert(profilePayload)
-      .select('*')
-      .single();
-
-    if (profileError || !newEmployee) {
-      if (userId && password) {
-        await (adminSupabase || context.dbClient).auth.admin.deleteUser(userId).catch(() => {});
-      }
-      logDetailedError('Employee.create.profile', profileError, { userId, email: employeeData.email });
-      return res.status(400).json({ success: false, error: getClientErrorMessage('profile_save_failed', 'Gagal menyimpan profil karyawan') });
-    }
-
-    if (Array.isArray(documents) && documents.length > 0) {
-      const docsToInsert = documents.map((doc) => ({
-        employeeId: newEmployee.id,
-        name: doc?.name,
-        type: doc?.type,
-        fileUrl: doc?.fileUrl,
-        uploadedAt: doc?.uploadedAt || new Date().toISOString(),
-      }));
-
-      const { error: docError } = await context.dbClient.from('documents').insert(docsToInsert);
-      if (docError) {
-        loggingService.warn('Document insert failed after employee creation', { error: docError.message });
-      }
-    }
-
-    await invalidateEmployeeCaches(newEmployee);
-
-    return res.status(201).json({
-      success: true,
-      data: newEmployee,
-    });
-  } catch (err) {
-    logDetailedError('Employee.create.endpoint', err, { email: req.body?.employeeData?.email });
-    return res.status(500).json({ success: false, error: getClientErrorMessage('internal_error', 'internal_error') });
-  }
-});
-
-app.put('/api/employees/:id', async (req, res) => {
-  try {
-    const context = await getRequesterContext(req);
-    if (!context.ok) {
-      return res.status(context.status).json({ success: false, error: context.error });
-    }
-
-    if (!canManageEmployeesRole(context.role)) {
-      return res.status(403).json({ success: false, error: 'Hanya admin & HRD yang dapat mengubah data karyawan' });
-    }
-
-    const { updateData } = req.body || {};
-    if (!updateData || typeof updateData !== 'object') {
-      return res.status(400).json({ success: false, error: 'updateData is required' });
-    }
-
-    const sanitizedUpdate = normalizeEmployeeUpdateData(updateData);
-
-    const { data: updatedEmployee, error } = await context.dbClient
-      .from('employees')
-      .update(sanitizedUpdate)
-      .eq('id', req.params.id)
-      .select('*')
-      .single();
-
-    if (error || !updatedEmployee) {
-      logDetailedError('Employee.update', error, { employeeId: req.params.id });
-      return res.status(400).json({ success: false, error: getClientErrorMessage('profile_update_failed', 'Gagal memperbarui profil karyawan') });
-    }
-
-    await invalidateEmployeeCaches(updatedEmployee);
-
-    return res.json({ success: true, data: updatedEmployee });
-  } catch (err) {
-    logDetailedError('Employee.update.endpoint', err, { employeeId: req.params.id });
-    return res.status(500).json({ success: false, error: getClientErrorMessage('internal_error', 'internal_error') });
-  }
-});
-
-app.delete('/api/employees/:id', async (req, res) => {
-  try {
-    const context = await getRequesterContext(req);
-    if (!context.ok) {
-      return res.status(context.status).json({ success: false, error: context.error });
-    }
-
-    if (!canDeleteEmployeesRole(context.role)) {
-      return res.status(403).json({ success: false, error: 'Hanya admin yang dapat menghapus karyawan' });
-    }
-
-    const { data: targetEmployee, error: fetchError } = await context.dbClient
-      .from('employees')
-      .select('id, user_id, nama')
-      .eq('id', req.params.id)
-      .maybeSingle();
-
-    if (fetchError || !targetEmployee) {
-      return res.status(404).json({ success: false, error: 'Employee not found' });
-    }
-
-    const { error } = await context.dbClient
-      .from('employees')
-      .delete()
-      .eq('id', req.params.id);
-
-    if (error) {
-      logDetailedError('Employee.delete', error, { employeeId: req.params.id });
-      return res.status(400).json({ success: false, error: getClientErrorMessage('delete_failed', 'Gagal menghapus data') });
-    }
-
-    await invalidateEmployeeCaches(targetEmployee);
-
-    return res.json({ success: true, data: { id: req.params.id } });
-  } catch (err) {
-    logDetailedError('Employee.delete.endpoint', err, { employeeId: req.params.id });
-    return res.status(500).json({ success: false, error: getClientErrorMessage('internal_error', 'internal_error') });
-  }
-});
-
-app.post('/api/organization/units', async (req, res) => {
-  try {
-    const context = await getRequesterContext(req);
-    if (!context.ok) {
-      return res.status(context.status).json({ success: false, error: context.error });
-    }
-
-    if (!canManageOrganizationRole(context.role)) {
-      return res.status(403).json({ success: false, error: 'Hanya admin yang dapat mengelola unit kerja' });
-    }
-
-    const { unit } = req.body || {};
-    if (!unit || typeof unit !== 'object') {
-      return res.status(400).json({ success: false, error: 'unit is required' });
-    }
-
-    const safeUnit = normalizeUnitData(unit);
-    const payload = {
-      nama: safeUnit.nama,
-      shifts: safeUnit.shifts ?? null,
-      shift_assignments: safeUnit.shift_assignments ?? null,
-    };
-    let result;
-    if (unit.id) {
-      const { data, error } = await context.dbClient
-        .from('units')
-        .update(payload)
-        .eq('id', unit.id)
-        .select('*')
-        .single();
-      if (error || !data) {
-        logDetailedError('Unit.update', error, { unitId: unit.id });
-        return res.status(400).json({ success: false, error: getClientErrorMessage('unit_save_failed', 'Gagal menyimpan unit kerja') });
-      }
-      result = data;
-    } else {
-      const { data, error } = await context.dbClient
-        .from('units')
-        .insert(payload)
-        .select('*')
-        .single();
-      if (error || !data) {
-        logDetailedError('Unit.create', error, { unitName: payload.nama });
-        return res.status(400).json({ success: false, error: getClientErrorMessage('unit_save_failed', 'Gagal menyimpan unit kerja') });
-      }
-      result = data;
-    }
-
-    await invalidateOrganizationCaches();
-    return res.json({ success: true, data: result });
-  } catch (err) {
-    logDetailedError('Unit.save.endpoint', err);
-    return res.status(500).json({ success: false, error: getClientErrorMessage('internal_error', 'internal_error') });
-  }
-});
-
-app.delete('/api/organization/units/:id', async (req, res) => {
-  try {
-    const context = await getRequesterContext(req);
-    if (!context.ok) {
-      return res.status(context.status).json({ success: false, error: context.error });
-    }
-
-    if (!canManageOrganizationRole(context.role)) {
-      return res.status(403).json({ success: false, error: 'Hanya admin yang dapat menghapus unit kerja' });
-    }
-
-    const { data: targetUnit, error: fetchError } = await context.dbClient
-      .from('units')
-      .select('id, nama')
-      .eq('id', req.params.id)
-      .maybeSingle();
-
-    if (fetchError || !targetUnit) {
-      return res.status(404).json({ success: false, error: 'Unit kerja tidak ditemukan' });
-    }
-
-    const { error } = await context.dbClient.from('units').delete().eq('id', req.params.id);
-    if (error) {
-      logDetailedError('Unit.delete', error, { unitId: req.params.id });
-      return res.status(400).json({ success: false, error: getClientErrorMessage('delete_failed', 'Gagal menghapus unit kerja') });
-    }
-
-    await context.dbClient
-      .from('employees')
-      .update({ unitKerjaId: null })
-      .eq('unitKerjaId', req.params.id)
-      .catch(() => {});
-
-    await invalidateOrganizationCaches();
-    return res.json({ success: true, data: { id: req.params.id } });
-  } catch (err) {
-    logDetailedError('Unit.delete.endpoint', err, { unitId: req.params.id });
-    return res.status(500).json({ success: false, error: getClientErrorMessage('internal_error', 'internal_error') });
-  }
-});
-
-app.post('/api/organization/departments', async (req, res) => {
-  try {
-    const context = await getRequesterContext(req);
-    if (!context.ok) {
-      return res.status(context.status).json({ success: false, error: context.error });
-    }
-
-    if (!canManageOrganizationRole(context.role)) {
-      return res.status(403).json({ success: false, error: 'Hanya admin yang dapat mengelola departemen' });
-    }
-
-    const { department } = req.body || {};
-    if (!department || typeof department !== 'object') {
-      return res.status(400).json({ success: false, error: 'department is required' });
-    }
-
-    const payload = normalizeSimpleNameEntity(department);
-    let result;
-    if (department.id) {
-      const { data, error } = await context.dbClient.from('departments').update(payload).eq('id', department.id).select('*').single();
-      if (error || !data) {
-        logDetailedError('Department.update', error, { departmentId: department.id });
-        return res.status(400).json({ success: false, error: getClientErrorMessage('department_save_failed', 'Gagal menyimpan departemen') });
-      }
-      result = data;
-    } else {
-      const { data, error } = await context.dbClient.from('departments').insert(payload).select('*').single();
-      if (error || !data) {
-        logDetailedError('Department.create', error, { departmentName: payload.nama });
-        return res.status(400).json({ success: false, error: getClientErrorMessage('department_save_failed', 'Gagal menyimpan departemen') });
-      }
-      result = data;
-    }
-
-    await invalidateOrganizationCaches();
-    return res.json({ success: true, data: result });
-  } catch (err) {
-    logDetailedError('Department.save.endpoint', err);
-    return res.status(500).json({ success: false, error: getClientErrorMessage('internal_error', 'internal_error') });
-  }
-});
-
-app.delete('/api/organization/departments/:id', async (req, res) => {
-  try {
-    const context = await getRequesterContext(req);
-    if (!context.ok) {
-      return res.status(context.status).json({ success: false, error: context.error });
-    }
-
-    if (!canManageOrganizationRole(context.role)) {
-      return res.status(403).json({ success: false, error: 'Hanya admin yang dapat menghapus departemen' });
-    }
-
-    const { data: targetDept, error: fetchError } = await context.dbClient.from('departments').select('id, nama').eq('id', req.params.id).maybeSingle();
-    if (fetchError || !targetDept) {
-      return res.status(404).json({ success: false, error: 'Departemen tidak ditemukan' });
-    }
-
-    const { error } = await context.dbClient.from('departments').delete().eq('id', req.params.id);
-    if (error) {
-      logDetailedError('Department.delete', error, { departmentId: req.params.id });
-      return res.status(400).json({ success: false, error: getClientErrorMessage('delete_failed', 'Gagal menghapus departemen') });
-    }
-
-    await context.dbClient
-      .from('employees')
-      .update({ departemen: '' })
-      .eq('departemen', targetDept.nama)
-      .catch(() => {});
-
-    await invalidateOrganizationCaches();
-    return res.json({ success: true, data: { id: req.params.id } });
-  } catch (err) {
-    logDetailedError('Department.delete.endpoint', err, { departmentId: req.params.id });
-    return res.status(500).json({ success: false, error: getClientErrorMessage('internal_error', 'internal_error') });
-  }
-});
-
-app.post('/api/organization/positions', async (req, res) => {
-  try {
-    const context = await getRequesterContext(req);
-    if (!context.ok) {
-      return res.status(context.status).json({ success: false, error: context.error });
-    }
-
-    if (!canManageOrganizationRole(context.role)) {
-      return res.status(403).json({ success: false, error: 'Hanya admin yang dapat mengelola jabatan' });
-    }
-
-    const { position } = req.body || {};
-    if (!position || typeof position !== 'object') {
-      return res.status(400).json({ success: false, error: 'position is required' });
-    }
-
-    const payload = normalizeSimpleNameEntity(position);
-    let result;
-    if (position.id) {
-      const { data, error } = await context.dbClient.from('positions').update(payload).eq('id', position.id).select('*').single();
-      if (error || !data) {
-        logDetailedError('Position.update', error, { positionId: position.id });
-        return res.status(400).json({ success: false, error: getClientErrorMessage('position_save_failed', 'Gagal menyimpan jabatan') });
-      }
-      result = data;
-    } else {
-      const { data, error } = await context.dbClient.from('positions').insert(payload).select('*').single();
-      if (error || !data) {
-        logDetailedError('Position.create', error, { positionName: payload.nama });
-        return res.status(400).json({ success: false, error: getClientErrorMessage('position_save_failed', 'Gagal menyimpan jabatan') });
-      }
-      result = data;
-    }
-
-    await invalidateOrganizationCaches();
-    return res.json({ success: true, data: result });
-  } catch (err) {
-    logDetailedError('Position.save.endpoint', err);
-    return res.status(500).json({ success: false, error: getClientErrorMessage('internal_error', 'internal_error') });
-  }
-});
-
-app.delete('/api/organization/positions/:id', async (req, res) => {
-  try {
-    const context = await getRequesterContext(req);
-    if (!context.ok) {
-      return res.status(context.status).json({ success: false, error: context.error });
-    }
-
-    if (!canManageOrganizationRole(context.role)) {
-      return res.status(403).json({ success: false, error: 'Hanya admin yang dapat menghapus jabatan' });
-    }
-
-    const { data: targetPos, error: fetchError } = await context.dbClient.from('positions').select('id, nama').eq('id', req.params.id).maybeSingle();
-    if (fetchError || !targetPos) {
-      return res.status(404).json({ success: false, error: 'Jabatan tidak ditemukan' });
-    }
-
-    const { error } = await context.dbClient.from('positions').delete().eq('id', req.params.id);
-    if (error) {
-      logDetailedError('Position.delete', error, { positionId: req.params.id });
-      return res.status(400).json({ success: false, error: getClientErrorMessage('delete_failed', 'Gagal menghapus jabatan') });
-    }
-
-    await context.dbClient
-      .from('employees')
-      .update({ jabatan: '' })
-      .eq('jabatan', targetPos.nama)
-      .catch(() => {});
-
-    await invalidateOrganizationCaches();
-    return res.json({ success: true, data: { id: req.params.id } });
-  } catch (err) {
-    logDetailedError('Position.delete.endpoint', err, { positionId: req.params.id });
-    return res.status(500).json({ success: false, error: getClientErrorMessage('internal_error', 'internal_error') });
-  }
-});
-
-app.post('/api/attendance-change-requests/bulk', async (req, res) => {
-  try {
-    const context = await getRequesterContext(req);
-    if (!context.ok) {
-      return res.status(context.status).json({ success: false, error: context.error });
-    }
-
-    if (!canManageOperationalRequestsRole(context.role)) {
-      return res.status(403).json({ success: false, error: 'Tidak memiliki izin membuat request perubahan absensi' });
-    }
-
-    const { payloads } = req.body || {};
-    if (!Array.isArray(payloads) || payloads.length === 0) {
-      return res.status(400).json({ success: false, error: 'payloads is required' });
-    }
-
-    const normalizedPayloads = payloads.map((payload) => ({
-      ...normalizeRequestPayload(payload),
-      maker_user_id: context.user.id,
-      maker_employee_id: context.employee.id,
-      source_portal: payload.source_portal || 'operational',
-      status: payload.status || 'pending',
-    }));
-
-    const { error } = await context.dbClient
-      .from('attendance_change_requests')
-      .insert(normalizedPayloads);
-
-    if (error) {
-      logDetailedError('AttendanceRequest.bulkCreate', error, { count: normalizedPayloads.length });
-      return res.status(400).json({ success: false, error: getClientErrorMessage('request_save_failed', 'Gagal menyimpan request') });
-    }
-
-    return res.json({ success: true, count: normalizedPayloads.length });
-  } catch (err) {
-    logDetailedError('AttendanceRequest.bulkCreate.endpoint', err);
-    return res.status(500).json({ success: false, error: getClientErrorMessage('internal_error', 'internal_error') });
-  }
-});
-
-// ── Audit Log Cleanup (Admin only) ──
-app.delete('/api/audit-logs', async (req, res) => {
-  try {
-    const context = await getRequesterContext(req);
-    if (!context.ok) {
-      return res.status(context.status).json({ success: false, error: context.error });
-    }
-
-    if (!canManageOrganizationRole(context.role)) {
-      return res.status(403).json({ success: false, error: 'Hanya admin yang dapat menghapus audit log' });
-    }
-
-    const { mode = 'all', days = 90 } = req.body || {};
-
-    if (mode === 'old') {
-      const { error } = await context.dbClient.rpc('cleanup_old_audit_logs', { days_old: days });
-      if (error) {
-        logDetailedError('AuditLog.cleanup', error, { days });
-        return res.status(400).json({ success: false, error: getClientErrorMessage('delete_failed', 'Gagal membersihkan audit log lama') });
-      }
-      return res.json({ success: true, data: { deletedCount: 0 } });
-    } else {
-      const { error } = await context.dbClient.rpc('delete_all_audit_logs');
-      if (error) {
-        logDetailedError('AuditLog.deleteAll', error, {});
-        return res.status(400).json({ success: false, error: getClientErrorMessage('delete_failed', 'Gagal menghapus semua audit log') });
-      }
-      return res.json({ success: true, data: { deletedCount: 0 } });
-    }
-  } catch (err) {
-    logDetailedError('AuditLog.delete.endpoint', err, {});
-    return res.status(500).json({ success: false, error: getClientErrorMessage('internal_error', 'internal_error') });
-  }
-});
-
-// ── Cache invalidation endpoint (internal) ──
-app.post('/api/cache/invalidate', async (req, res) => {
-  try {
-    const secret = req.header('x-internal-auth') || req.query.key;
-    const configured = process.env.INTERNAL_API_KEY;
-
-    // Require INTERNAL_API_KEY to be configured for this endpoint to work
-    if (!configured) {
-      loggingService.error('Cache invalidate attempted but INTERNAL_API_KEY not configured');
-      return res.status(503).json({ error: 'internal_api_not_enabled' });
-    }
-
-    if (secret !== configured) {
-      return res.status(403).json({ error: 'Forbidden' });
-    }
-
-    const { pattern, userId } = req.body || {};
-    const { getCache } = await import('./services/redisCache.js');
-    const cache = getCache();
-    if (pattern) await cache.invalidatePattern(pattern);
-    if (userId) await cache.invalidateUser(userId);
-    return res.json({ success: true });
-  } catch (err) {
-    loggingService.error('Cache invalidate API error', { error: err.message });
-    return res.status(500).json({ error: 'internal_error' });
-  }
-});
+app.use('/api/employees', setupEmployeeRoutes({
+  getRequesterContext,
+  canManageEmployeesRole,
+  canDeleteEmployeesRole,
+  adminSupabase,
+  logDetailedError,
+  getClientErrorMessage,
+  invalidateEmployeeCaches,
+  normalizeEmployeeData,
+  normalizeEmployeeUpdateData,
+  loggingService
+}));
+
+// ── Organization API ──
+app.use('/api/organization', setupOrganizationRoutes({
+  getRequesterContext,
+  canManageOrganizationRole,
+  logDetailedError,
+  getClientErrorMessage,
+  invalidateOrganizationCaches,
+  normalizeUnitData,
+  normalizeSimpleNameEntity
+}));
+
+// ── Operations API ──
+app.use('/api', setupOperationsRoutes({
+  getRequesterContext,
+  canManageOperationalRequestsRole,
+  canManageOrganizationRole,
+  normalizeRequestPayload,
+  logDetailedError,
+  getClientErrorMessage
+}));
 
 // ── SPA fallback ──
 app.get('*', (req, res) => {

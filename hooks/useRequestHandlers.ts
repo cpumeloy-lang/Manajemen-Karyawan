@@ -70,7 +70,22 @@ export const useRequestHandlers = () => {
           const employeeToUpdate = employees.find((emp) => emp.id === leaveReq.employeeId);
 
           if (employeeToUpdate) {
-            const newSisaCuti = employeeToUpdate.sisaCuti - diffDays;
+            const newSisaCuti = (employeeToUpdate.sisaCuti ?? 0) - diffDays;
+
+            // [HK-M1] Guard: prevent sisaCuti from going negative
+            if (newSisaCuti < 0) {
+              showError(
+                'Sisa cuti tidak mencukupi',
+                `Karyawan hanya memiliki ${employeeToUpdate.sisaCuti ?? 0} hari cuti tersisa, tetapi permohonan membutuhkan ${diffDays} hari.`
+              );
+              // Rollback request status back to Pending
+              await supabase
+                .from('requests')
+                .update({ status: RequestStatus.Pending })
+                .eq('id', requestId);
+              return;
+            }
+
             const { error: empError } = await supabase
               .from('employees')
               .update({ sisaCuti: newSisaCuti })

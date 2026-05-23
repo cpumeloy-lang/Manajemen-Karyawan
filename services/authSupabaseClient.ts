@@ -7,6 +7,7 @@
 
 import { createClient } from '@supabase/supabase-js';
 import type { Database } from './database.types';
+import logger from './logger.ts';
 
 let configuredAuthUrl = String(import.meta.env.VITE_AUTH_SUPABASE_URL || import.meta.env.VITE_SUPABASE_URL || '').trim();
 
@@ -23,13 +24,12 @@ const authSupabaseKey = String(import.meta.env.VITE_AUTH_SUPABASE_ANON_KEY || im
 
 
 if (!authSupabaseUrl || !authSupabaseKey) {
-  console.error('❌ Supabase Auth configuration missing!');
-  console.error('VITE_AUTH_SUPABASE_URL:', authSupabaseUrl ? 'SET' : 'MISSING');
-  console.error('VITE_AUTH_SUPABASE_ANON_KEY:', authSupabaseKey ? 'SET' : 'MISSING');
+  logger.error('Supabase Auth configuration missing!', undefined, {
+    url: authSupabaseUrl ? 'SET' : 'MISSING',
+    key: authSupabaseKey ? 'SET' : 'MISSING',
+  });
 } else {
-  console.log('✅ Supabase Auth Client Initialized');
-  console.log('📍 URL:', authSupabaseUrl);
-  console.log('🔐 Purpose: Authentication Only (Login, Logout, Password Reset)');
+  logger.info('Supabase Auth Client Initialized', { url: authSupabaseUrl });
 }
 
 const authClientKey = '__hrms_auth_supabase_client__';

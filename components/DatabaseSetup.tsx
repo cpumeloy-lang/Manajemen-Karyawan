@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import logger from '../services/logger.ts';
 
 const DatabaseSetup: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
@@ -33,7 +34,7 @@ const DatabaseSetup: React.FC = () => {
         message: 'Script SQL berhasil diunduh. Jalankan file ini di Supabase SQL Editor, lalu refresh aplikasi.'
       });
     } catch (error: any) {
-      console.error('Error downloading setup SQL:', error);
+      logger.error('Error downloading setup SQL', error);
       setResult({
         success: false,
         message: `Gagal menyiapkan script setup: ${error.message}. Silakan buka file database-setup.sql langsung dari proyek.`
@@ -59,7 +60,7 @@ const DatabaseSetup: React.FC = () => {
         message: 'Isi database-setup.sql berhasil disalin. Tempelkan ke Supabase SQL Editor lalu jalankan.'
       });
     } catch (error: any) {
-      console.error('Error copying setup SQL:', error);
+      logger.error('Error copying setup SQL', error);
       setResult({
         success: false,
         message: `Gagal menyalin script setup: ${error.message}. Silakan copy manual dari file database-setup.sql.`

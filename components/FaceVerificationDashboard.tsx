@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import logger from '../services/logger.ts';
 import { supabase } from '../services/supabaseClient.ts';
 
 interface FaceVerificationAttempt {
@@ -95,7 +96,7 @@ const FaceVerificationDashboard: React.FC = () => {
                 recentAttempts: attempts.slice(0, 20)
             });
         } catch (err: any) {
-            console.error('Error fetching face verification stats:', err);
+            logger.error('Error fetching face verification stats', err);
             setError(err.message || 'Gagal memuat statistik');
         } finally {
             setLoading(false);

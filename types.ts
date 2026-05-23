@@ -145,6 +145,8 @@ export interface SystemSettings {
     address?: string;
     phone?: string;
     default_shifts?: ShiftDefinition[];
+    // UI theme preference for web admin ('light' | 'dark')
+    ui_theme?: 'light' | 'dark' | 'system';
     // Payroll configuration
     overtime_rate_per_hour?: number;        // Default: 30000
     bpjs_kesehatan_rate?: number;           // Default: 0.01 (1%)

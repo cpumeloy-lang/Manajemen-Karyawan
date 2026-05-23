@@ -1,0 +1,136 @@
+# ============================================================================
+# Prometheus Alerting Rules for HRMS Pro
+# File: prometheus/alerts.yml
+# ============================================================================
+
+groups:
+  - name: hrms_alerts
+    interval: 30s
+    rules:
+
+      # ── Availability ──
+      - alert: HRMSDown
+        expr: up{job="hrms-pro"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          category: availability
+        annotations:
+          summary: "HRMS Pro is DOWN"
+          description: "The HRMS Pro service has been unreachable for more than 2 minutes."
+
+      - alert: HRMSHighErrorRate
+        expr: rate(http_requests_total{job="hrms-pro",status=~"5.."}[5m]) / rate(http_requests_total{job="hrms-pro"}[5m]) > 0.05
+        for: 5m
+        labels:
+          severity: critical
+          category: errors
+        annotations:
+          summary: "High 5xx error rate ({{ $value | humanizePercentage }})"
+          description: "More than 5% of requests are returning 5xx errors."
+
+      # ── Performance ──
+      - alert: HRMSHighLatency
+        expr: histogram_quantile(0.95, rate(http_request_duration_seconds_bucket{job="hrms-pro"}[5m])) > 2
+        for: 5m
+        labels:
+          severity: warning
+          category: performance
+        annotations:
+          summary: "High P95 latency: {{ $value }}s"
+          description: "95th percentile request latency exceeds 2 seconds."
+
+      - alert: HRMSHighLatencyCritical
+        expr: histogram_quantile(0.95, rate(http_request_duration_seconds_bucket{job="hrms-pro"}[5m])) > 5
+        for: 3m
+        labels:
+          severity: critical
+          category: performance
+        annotations:
+          summary: "Critical P95 latency: {{ $value }}s"
+          description: "95th percentile request latency exceeds 5 seconds."
+
+      # ── Database ──
+      - alert: HRMSDatabaseConnectionPoolHigh
+        expr: supabase_db_connections_active{job="hrms-pro"} / supabase_db_connections_max{job="hrms-pro"} > 0.8
+        for: 5m
+        labels:
+          severity: warning
+          category: database
+        annotations:
+          summary: "DB connection pool > 80% ({{ $value | humanizePercentage }})"
+          description: "Active database connections are approaching the maximum pool size."
+
+      - alert: HRMSDatabaseDown
+        expr: supabase_db_up{job="hrms-pro"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          category: database
+        annotations:
+          summary: "Database connection lost"
+          description: "Cannot reach the Supabase database."
+
+      # ── Redis ──
+      - alert: HRMSRedisDown
+        expr: redis_up{job="hrms-pro"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          category: cache
+        annotations:
+          summary: "Redis is DOWN"
+          description: "Redis cache is unreachable. Rate limiting and caching degraded."
+
+      - alert: HRMSRedisMemoryHigh
+        expr: redis_memory_used_bytes{job="hrms-pro"} / redis_memory_max_bytes{job="hrms-pro"} > 0.85
+        for: 10m
+        labels:
+          severity: warning
+          category: cache
+        annotations:
+          summary: "Redis memory > 85% ({{ $value | humanizePercentage }})"
+          description: "Redis memory usage is high. Consider scaling or eviction policy review."
+
+      # ── Rate Limiting ──
+      - alert: HRMSHighRateLimitHits
+        expr: rate(rate_limit_hits_total{job="hrms-pro"}[5m]) > 10
+        for: 5m
+        labels:
+          severity: warning
+          category: security
+        annotations:
+          summary: "High rate limit hits: {{ $value }}/s"
+          description: "Many requests are being rate-limited. Possible abuse or misconfiguration."
+
+      # ── Attendance Sync ──
+      - alert: HRMSHikvisionSyncFailed
+        expr: hikvision_sync_failures_total{job="hrms-pro"} - hikvision_sync_failures_total{job="hrms-pro"} offset 1h > 5
+        for: 10m
+        labels:
+          severity: warning
+          category: integration
+        annotations:
+          summary: "Hikvision sync failures increasing"
+          description: "More than 5 Hikvision sync failures in the last hour."
+
+      # ── Memory / CPU ──
+      - alert: HRMSHighMemory
+        expr: process_resident_memory_bytes{job="hrms-pro"} / 1024 / 1024 / 1024 > 2
+        for: 5m
+        labels:
+          severity: warning
+          category: resources
+        annotations:
+          summary: "High memory usage: {{ $value }} GB"
+          description: "Process memory exceeds 2 GB."
+
+      - alert: HRMSHighCPU
+        expr: rate(process_cpu_seconds_total{job="hrms-pro"}[5m]) * 100 > 80
+        for: 5m
+        labels:
+          severity: warning
+          category: resources
+        annotations:
+          summary: "High CPU usage: {{ $value }}%"
+          description: "Process CPU usage exceeds 80%."

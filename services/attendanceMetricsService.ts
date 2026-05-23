@@ -56,16 +56,17 @@ export async function recalculateAttendanceMetrics(
     (employees || []).forEach((e: any) => empMap.set(e.id, { shift: e.shift, unitKerjaId: e.unitKerjaId }));
 
     // Load employee_schedules untuk lookup per-date shift (lebih akurat)
+    // NOTE: field name is 'schedule_date' per types.ts EmployeeSchedule, NOT 'date'
     const { data: schedules } = await (supabase as any)
         .from('employee_schedules')
-        .select('employee_id, date, shift_name, shift_start_time, shift_end_time, is_off_day')
+        .select('employee_id, schedule_date, shift_name, shift_start_time, shift_end_time, is_off_day')
         .in('employee_id', empIds)
-        .gte('date', dateFrom)
-        .lte('date', dateTo);
+        .gte('schedule_date', dateFrom)
+        .lte('schedule_date', dateTo);
 
-    // Map: "employeeId_date" → schedule
+    // Map: "employeeId_date" → schedule — use schedule_date as key
     const schedMap = new Map<string, any>();
-    (schedules || []).forEach((s: any) => schedMap.set(`${s.employee_id}_${s.date}`, s));
+    (schedules || []).forEach((s: any) => schedMap.set(`${s.employee_id}_${s.schedule_date}`, s));
 
     const updates: { id: string; is_late: boolean; overtime_hours: number }[] = [];
 
@@ -105,7 +106,12 @@ export async function recalculateAttendanceMetrics(
             if (shiftDuration <= 0) shiftDuration += 24;
 
             const [inH, inM] = rec.clock_in.split(':').map(Number);
-            const isLate = (inH * 60 + inM) > (startH * 60 + startM + tolerance);
+            let adjustedInH = inH;
+            // [SV-M1] Handle clock-in after midnight for night shifts
+            if (startH >= 18 && inH <= 12) {
+                adjustedInH += 24;
+            }
+            const isLate = (adjustedInH * 60 + inM) > (startH * 60 + startM + tolerance);
 
             const inVal  = inH + inM / 60;
             const [outH, outM] = rec.clock_out.split(':').map(Number);

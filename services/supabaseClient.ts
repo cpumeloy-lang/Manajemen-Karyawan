@@ -1,4 +1,5 @@
 import { authSupabase } from './authSupabaseClient';
+import logger from './logger.ts';
 
 // Menggunakan variabel lingkungan untuk konfigurasi Supabase
 let configuredSupabaseUrl = String(import.meta.env.VITE_SUPABASE_URL || '').trim();
@@ -15,13 +16,12 @@ const supabaseKey = String(import.meta.env.VITE_SUPABASE_ANON_KEY || '');
 
 // Validasi konfigurasi untuk mencegah error
 if (!supabaseUrl || !supabaseKey) {
-  console.error('❌ Konfigurasi Supabase tidak lengkap!');
-  console.error('VITE_SUPABASE_URL:', configuredSupabaseUrl ? 'SET' : 'MISSING');
-  console.error('VITE_SUPABASE_ANON_KEY:', supabaseKey ? 'SET' : 'MISSING');
-  console.error('Pastikan VITE_SUPABASE_URL berisi URL hosted Supabase (atau gunakan nilai "auto" untuk mode lokal) dan VITE_SUPABASE_ANON_KEY telah diatur.');
+  logger.error('Konfigurasi Supabase tidak lengkap!', undefined, {
+    url: configuredSupabaseUrl ? 'SET' : 'MISSING',
+    key: supabaseKey ? 'SET' : 'MISSING',
+  });
 } else {
-  console.log('✅ Supabase configuration loaded');
-  console.log('📍 URL:', supabaseUrl);
+  logger.info('Supabase configuration loaded', { url: supabaseUrl });
 }
 
 // Reuse auth client to avoid spawning another GoTrue client instance.

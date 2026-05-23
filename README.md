@@ -39,8 +39,11 @@ HRMS Pro/
 ```bash
 npm install
 cp .env.example .env.local  # configure VITE_SUPABASE_URL & VITE_SUPABASE_ANON_KEY
-npm run dev                 # http://localhost:3030
+npm run dev                 # frontend + backend together
 ```
+
+- Frontend only: `npm run dev:web`
+- Frontend + backend: `npm run dev`
 
 ### Mobile Development
 

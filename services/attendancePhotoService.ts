@@ -1,4 +1,5 @@
 import { supabase } from './supabaseClient';
+import logger from './logger.ts';
 
 const BUCKET_NAME = 'attendance-photos';
 
@@ -27,7 +28,7 @@ export async function uploadAttendancePhoto(
       });
 
     if (uploadError) {
-      console.error('[attendancePhotoService] Upload error:', uploadError.message);
+      logger.error('[attendancePhotoService] Upload error', uploadError);
       return '';
     }
 
@@ -37,7 +38,7 @@ export async function uploadAttendancePhoto(
 
     return urlData?.publicUrl ?? '';
   } catch (err: any) {
-    console.error('[attendancePhotoService] Unexpected error:', err.message);
+    logger.error('[attendancePhotoService] Unexpected error', err);
     return '';
   }
 }

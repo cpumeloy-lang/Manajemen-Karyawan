@@ -4,6 +4,7 @@ import { Employee, WorkUnit, SortKey, SortDirection } from '../types.ts';
 import { PencilIcon, TrashIcon, ChevronUpIcon, ChevronDownIcon, EyeIcon } from './icons.tsx';
 import { createEmployeeImportTemplate, EMPLOYEE_XLSX_COL_WIDTHS, EMPLOYEE_XLSX_HEADERS } from '../services/excelTemplateService.ts';
 import { useConfirm } from './ConfirmDialog.tsx';
+import logger from '../services/logger.ts';
 import EmptyState from './EmptyState.tsx';
 
 interface EmployeeTableProps {
@@ -148,13 +149,13 @@ const EmployeeTable: React.FC<EmployeeTableProps> = ({ employees, workUnits = []
                     }
 
                 } catch (error: any) {
-                    console.error('Error parsing Excel:', error);
+                    logger.error('Error parsing Excel', error);
                     alert(`Gagal membaca file Excel: ${error.message}`);
                 }
             };
             reader.readAsArrayBuffer(file);
         } catch (error: any) {
-            console.error('Error reading file:', error);
+            logger.error('Error reading file', error);
             alert(`Gagal membaca file: ${error.message}`);
         } finally {
             // Reset input file
@@ -270,23 +271,22 @@ const EmployeeTable: React.FC<EmployeeTableProps> = ({ employees, workUnits = []
                                 </td>
                                 <td className="px-6 py-4 whitespace-nowrap">
                                     <div className="flex flex-col gap-1">
-                                        {employee.isProfileCompleted && (
-                                            <span className="px-2 py-1 text-xs leading-4 font-semibold rounded-full bg-blue-100 text-blue-700">
+                                        {employee.isProfileCompleted ? (
+                                            <span className="px-2 py-1 text-xs leading-4 font-semibold rounded-full bg-blue-100 text-blue-700 w-max">
                                                 ✓ Lengkap
                                             </span>
-                                        )}
-                                        {!employee.isProfileCompleted && (
-                                            <span className="px-2 py-1 text-xs leading-4 font-semibold rounded-full bg-gray-100 text-gray-600">
+                                        ) : (
+                                            <span className="px-2 py-1 text-xs leading-4 font-semibold rounded-full bg-gray-100 text-gray-600 w-max">
                                                 ⚠ Belum Lengkap
                                             </span>
                                         )}
                                         {employee.isVerified && (
-                                            <span className="px-2 py-1 text-xs leading-4 font-semibold rounded-full bg-green-100 text-green-700">
+                                            <span className="px-2 py-1 text-xs leading-4 font-semibold rounded-full bg-green-100 text-green-700 w-max">
                                                 ✓ Verified
                                             </span>
                                         )}
                                         {employee.isLocked && (
-                                            <span className="px-2 py-1 text-xs leading-4 font-semibold rounded-full bg-red-100 text-red-700">
+                                            <span className="px-2 py-1 text-xs leading-4 font-semibold rounded-full bg-red-100 text-red-700 w-max">
                                                 🔒 Locked
                                             </span>
                                         )}
@@ -332,14 +332,14 @@ const EmployeeTable: React.FC<EmployeeTableProps> = ({ employees, workUnits = []
             </div>
             {employees.length > 0 && (
                 <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                    <p className="text-sm text-gray-600">
+                    <p className="text-sm text-gray-600 dark:text-slate-400">
                         Menampilkan {startRow}-{endRow} dari {employees.length} karyawan
                     </p>
                     <div className="flex items-center gap-3">
-                        <label className="text-sm text-gray-600" htmlFor="employee-page-size">Baris:</label>
+                        <label className="text-sm text-gray-600 dark:text-slate-400" htmlFor="employee-page-size">Baris:</label>
                         <select
                             id="employee-page-size"
-                            className="border border-gray-300 rounded-lg px-2 py-1 text-sm"
+                            className="border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-gray-900 dark:text-slate-200 rounded-lg px-2 py-1 text-sm"
                             value={pageSize}
                             onChange={(e) => handlePageSizeChange(Number(e.target.value))}
                         >
@@ -350,11 +350,11 @@ const EmployeeTable: React.FC<EmployeeTableProps> = ({ employees, workUnits = []
                         <button
                             onClick={goToPrevPage}
                             disabled={currentPage === 1}
-                            className="px-3 py-1.5 text-sm rounded-lg border border-gray-300 disabled:opacity-50 disabled:cursor-not-allowed"
+                            className="px-3 py-1.5 text-sm rounded-lg border border-gray-300 dark:border-slate-700 text-gray-700 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                         >
                             Sebelumnya
                         </button>
-                        <span className="text-sm text-gray-700">Halaman {currentPage} / {totalPages}</span>
+                        <span className="text-sm text-gray-700 dark:text-slate-300">Halaman {currentPage} / {totalPages}</span>
                         <button
                             onClick={goToNextPage}
                             disabled={currentPage === totalPages}

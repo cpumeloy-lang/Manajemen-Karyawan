@@ -279,6 +279,7 @@ export type Database = {
           address: string | null
           phone: string | null
           default_shifts: Json | null
+          ui_theme: string | null
           overtime_rate_per_hour: number | null
           bpjs_kesehatan_rate: number | null
           bpjs_kesehatan_max_wage: number | null
@@ -292,6 +293,7 @@ export type Database = {
           address?: string | null
           phone?: string | null
           default_shifts?: Json | null
+          ui_theme?: string | null
           overtime_rate_per_hour?: number | null
           bpjs_kesehatan_rate?: number | null
           bpjs_kesehatan_max_wage?: number | null
@@ -305,6 +307,7 @@ export type Database = {
           address?: string | null
           phone?: string | null
           default_shifts?: Json | null
+          ui_theme?: string | null
           overtime_rate_per_hour?: number | null
           bpjs_kesehatan_rate?: number | null
           bpjs_kesehatan_max_wage?: number | null

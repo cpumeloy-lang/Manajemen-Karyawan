@@ -12,6 +12,7 @@
  */
 
 import { supabase } from './supabaseClient';
+import logger from './logger.ts';
 
 // ---------------------------------------------------------------------------
 // Config
@@ -80,47 +81,62 @@ export async function fetchAttendanceEventsFromDevice(
   endTime: string
 ): Promise<HikvisionAttendanceEvent[]> {
   const url = `${buildBaseUrl(config)}/ISAPI/AccessControl/AcsEvent?format=json`;
-
-  const body = {
-    AcsEventCond: {
-      searchID: `HRMS-${Date.now()}`,
-      searchResultPosition: 0,
-      maxResults: 1000,
-      major: 5,    // 5 = access control event
-      minor: 75,   // 75 = face recognition
-      startTime,
-      endTime,
-    },
-  };
-
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: buildBasicAuth(config.username, config.password),
-    },
-    body: JSON.stringify(body),
-  });
-
-  if (!response.ok) {
-    throw new Error(`Hikvision API error: ${response.status} ${response.statusText}`);
-  }
-
-  const data = await response.json();
   const events: HikvisionAttendanceEvent[] = [];
+  
+  const maxResults = 500;
+  let searchResultPosition = 0;
+  let hasMore = true;
 
-  const rawList = data?.AcsEvent?.InfoList ?? [];
-  for (const item of rawList) {
-    events.push({
-      employeeNoString: String(item.employeeNoString || item.cardNo || ''),
-      name: item.name || '',
-      time: item.time || '',
-      deviceSerial: item.deviceSerial || config.ip,
-      verifyMode: item.currentVerifyMode || 'face',
-      matchScore: item.faceMatchScore !== undefined ? item.faceMatchScore : undefined,
-      pictureName: item.pictureName || '',
-      type: detectEventType(item),
+  while (hasMore) {
+    const body = {
+      AcsEventCond: {
+        searchID: `HRMS-${Date.now()}`,
+        searchResultPosition,
+        maxResults,
+        major: 5,    // 5 = access control event
+        minor: 75,   // 75 = face recognition
+        startTime,
+        endTime,
+      },
+    };
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: buildBasicAuth(config.username, config.password),
+      },
+      body: JSON.stringify(body),
     });
+
+    if (!response.ok) {
+      throw new Error(`Hikvision API error: ${response.status} ${response.statusText}`);
+    }
+
+    const data = await response.json();
+    const rawList = data?.AcsEvent?.InfoList ?? [];
+    
+    for (const item of rawList) {
+      events.push({
+        employeeNoString: String(item.employeeNoString || item.cardNo || ''),
+        name: item.name || '',
+        time: item.time || '',
+        deviceSerial: item.deviceSerial || config.ip,
+        verifyMode: item.currentVerifyMode || 'face',
+        matchScore: item.faceMatchScore !== undefined ? item.faceMatchScore : undefined,
+        pictureName: item.pictureName || '',
+        type: detectEventType(item),
+      });
+    }
+
+    // [SV-M7] If the device returns fewer events than maxResults, we've reached the end
+    const responseStatus = data?.AcsEvent?.responseStatusStrg;
+    const isComplete = responseStatus === 'NO MATCH' || rawList.length < maxResults;
+    if (isComplete) {
+      hasMore = false;
+    } else {
+      searchResultPosition += rawList.length;
+    }
   }
 
   return events;
@@ -218,13 +234,15 @@ export async function syncAttendanceToSupabase(
 
       if (isCheckOut) {
         // Update existing record's clock_out
+        // IMPORTANT: use `employeeId` (UUID resolved from NIK) not `event.employeeNoString` (NIK)
+        // Using NIK would cause the filter to never match since the DB stores UUID as employee_id
         const q = supabase.from('attendance') as any;
         const { error } = await q
           .update({
             clock_out: record.clock_out,
             face_match_score_check_out: record.face_match_score_check_out,
           })
-          .eq('employee_id', event.employeeNoString)
+          .eq('employee_id', employeeId)
           .eq('tanggal', record.tanggal)
           .is('clock_out', null);
 
@@ -242,7 +260,7 @@ export async function syncAttendanceToSupabase(
       failed++;
       const msg = err instanceof Error ? err.message : String(err);
       errors.push(`[${event.employeeNoString}] ${msg}`);
-      console.error('Hikvision sync error:', err);
+      logger.error('Hikvision sync error', err);
     }
   }
 
@@ -303,19 +321,19 @@ export function startHikvisionAutoSync(
 ): void {
   const cfg = getHikvisionConfig();
   if (!cfg.syncEnabled || !cfg.ip) {
-    console.warn('[Hikvision] Auto-sync skipped: not configured');
+    logger.warn('[Hikvision] Auto-sync skipped: not configured');
     return;
   }
 
   if (syncTimer) return; // already running
 
   const intervalMs = cfg.syncIntervalMinutes * 60 * 1000;
-  console.log(`[Hikvision] Auto-sync started — interval: ${cfg.syncIntervalMinutes} min`);
+  logger.info(`[Hikvision] Auto-sync started`, { intervalMin: cfg.syncIntervalMinutes });
 
   syncTimer = setInterval(async () => {
-    console.log('[Hikvision] Running scheduled sync...');
+    logger.debug('[Hikvision] Running scheduled sync...');
     const result = await runHikvisionSync(cfg, 1); // last 1 hour per tick
-    console.log('[Hikvision] Sync result:', result);
+    logger.debug('[Hikvision] Sync result', { synced: result.synced, failed: result.failed });
     onResult?.(result);
   }, intervalMs);
 }
@@ -324,7 +342,7 @@ export function stopHikvisionAutoSync(): void {
   if (syncTimer) {
     clearInterval(syncTimer);
     syncTimer = null;
-    console.log('[Hikvision] Auto-sync stopped');
+    logger.info('[Hikvision] Auto-sync stopped');
   }
 }
 

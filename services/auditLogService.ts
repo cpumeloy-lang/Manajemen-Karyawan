@@ -1,4 +1,5 @@
 import { supabase } from './supabaseClient';
+import logger from './logger.ts';
 
 const AUDIT_LOG_UNAVAILABLE_CACHE_KEY = 'hrms.audit_logs_unavailable';
 
@@ -63,7 +64,7 @@ export const createAuditLog = async (params: CreateAuditLogParams) => {
         // Get current user
         const { data: { user }, error: userError } = await supabase.auth.getUser();
         if (userError || !user) {
-            console.error('Cannot create audit log: User not authenticated');
+            logger.warn('Cannot create audit log: User not authenticated');
             return null;
         }
 
@@ -75,7 +76,7 @@ export const createAuditLog = async (params: CreateAuditLogParams) => {
             .single();
 
         if (profileError || !profile) {
-            console.error('Cannot create audit log: Profile not found');
+            logger.warn('Cannot create audit log: Profile not found');
             return null;
         }
 
@@ -147,12 +148,12 @@ export const createAuditLog = async (params: CreateAuditLogParams) => {
                 return null;
             }
 
-            console.error('Error creating audit log:', error);
+            logger.error('Error creating audit log', error);
             return null;
         }
 
         setAuditLogUnavailableCache(false);
-        console.log('✅ Audit log created:', data.id);
+        logger.debug('Audit log created', { id: data.id });
         return data;
 
     } catch (error) {
@@ -161,7 +162,7 @@ export const createAuditLog = async (params: CreateAuditLogParams) => {
             return null;
         }
 
-        console.error('Error in createAuditLog:', error);
+        logger.error('Error in createAuditLog', error);
         return null;
     }
 };
@@ -270,7 +271,7 @@ export const getAuditLogs = async (filters?: {
                 return [];
             }
 
-            console.error('Error fetching audit logs:', error);
+            logger.error('Error fetching audit logs', error);
             return [];
         }
 
@@ -283,7 +284,7 @@ export const getAuditLogs = async (filters?: {
             return [];
         }
 
-        console.error('Error in getAuditLogs:', error);
+        logger.error('Error in getAuditLogs', error);
         return [];
     }
 };

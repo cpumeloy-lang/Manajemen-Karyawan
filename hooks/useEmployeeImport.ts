@@ -8,7 +8,6 @@ import {
   toSafeString,
   normalizeStatus,
 } from '../utils/dateUtils';
-import { mapEmployeeFromDatabase, mapEmployeeToDatabase } from '../utils/dataMapping';
 import {
   getImportField,
   normalizeImportMaritalStatus,
@@ -17,17 +16,12 @@ import {
   validateImportInternalDuplicates,
   ImportValidationError,
 } from '../utils/employeeImportUtils';
+import { getAuthHeaders } from '../utils/apiUtils.ts';
 
 export const useEmployeeImport = () => {
   const { employees } = useAppData();
   const { setEmployees } = useAppDataActions();
   const { showSuccess, showError } = useMessageHandlers();
-
-  const getAuthHeaders = useCallback(async () => {
-    const { data } = await supabase.auth.getSession();
-    const token = data.session?.access_token;
-    return token ? { Authorization: `Bearer ${token}` } : {};
-  }, []);
 
   const getField = useCallback(getImportField, []);
 
@@ -101,7 +95,8 @@ export const useEmployeeImport = () => {
   const fetchExistingEmails = useCallback(async () => {
     const { data, error } = await supabase
       .from('employees')
-      .select('email');
+      .select('email')
+      .limit(10000);
 
     if (error) {
       throw new Error(`Gagal membaca email existing: ${error.message}`);
@@ -150,6 +145,9 @@ export const useEmployeeImport = () => {
         const errorRows: ImportValidationError[] = [];
         const existingEmails = await fetchExistingEmails();
         const unitNameMap = await fetchUnits();
+        // [HK-M2] Fetch auth headers ONCE outside the loop.
+        // Previously called inside each iteration (N+1 pattern: one getSession() per employee row).
+        const authHeaders = await getAuthHeaders();
 
         for (let i = 0; i < importedData.length; i++) {
           try {
@@ -246,12 +244,11 @@ export const useEmployeeImport = () => {
             };
 
             const profileData = mapEmployeeToDatabase(newEmployee);
-            const authHeaders = await getAuthHeaders();
             const response = await fetch('/api/employees', {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
-                ...authHeaders,
+                ...authHeaders, // [HK-M2] reuse single token fetched before loop
               },
               body: JSON.stringify({ employeeData: profileData }),
             });

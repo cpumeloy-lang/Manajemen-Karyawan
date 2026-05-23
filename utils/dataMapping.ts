@@ -46,6 +46,10 @@ export const mapEmployeeToDatabase = (data: any) => {
 
     compensation,
 
+    gaji_pokok: _gaji_pokok,
+
+    tunjangan_profesi: _tunjangan_profesi,
+
     documents,
 
     // These snake_case duplicates come from mapEmployeeFromDatabase spread, must be stripped
@@ -86,7 +90,7 @@ export const mapEmployeeToDatabase = (data: any) => {
 
 
 
-  const resolvedUnitKerjaId = unitKerjaId ?? _unit_kerja_id ?? null;
+  const resolvedUnitKerjaId = String(unitKerjaId ?? _unit_kerja_id ?? '').trim() || null;
 
 
 
@@ -94,9 +98,11 @@ export const mapEmployeeToDatabase = (data: any) => {
 
     ...rest,
 
-    unitKerjaId: resolvedUnitKerjaId,
+    gajiPokok: compensation?.gajiPokok ?? data.gajiPokok ?? _gaji_pokok ?? null,
 
-    user_id: rest.user_id || null,
+    tunjanganProfesi: compensation?.tunjanganProfesi ?? data.tunjanganProfesi ?? _tunjangan_profesi ?? null,
+
+    unitKerjaId: resolvedUnitKerjaId,
 
     ktp_number: ktpNumber ?? _ktp_number,
 

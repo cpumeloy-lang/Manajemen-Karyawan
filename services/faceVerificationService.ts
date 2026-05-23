@@ -1,4 +1,5 @@
 import { supabase } from './supabaseClient';
+import logger from './logger.ts';
 
 export interface FaceVerificationResult {
   verified: boolean;
@@ -37,7 +38,7 @@ export const faceVerificationService = {
           }
         }]);
     } catch (error) {
-      console.error('Error logging face verification attempt:', error);
+      logger.error('Error logging face verification attempt', error);
       // Don't throw - logging failure shouldn't block the process
     }
   },
@@ -69,7 +70,7 @@ export const faceVerificationService = {
 
       return true;
     } catch (error) {
-      console.error('Error enrolling face:', error);
+      logger.error('Error enrolling face', error);
       // Log failed enrollment
       await this.logVerificationAttempt(
         employeeId,
@@ -125,11 +126,19 @@ export const faceVerificationService = {
       // Calculate similarity
       const storedDescriptor = new Float32Array(employee.face_descriptor);
       const distance = this.calculateEuclideanDistance(capturedDescriptor, storedDescriptor);
-      const matchScore = Math.max(0, 1 - distance); // Convert distance to similarity score
 
-      // Threshold for verification (adjust based on testing)
-      const threshold = 0.6;
-      const verified = matchScore >= threshold;
+      // face-api.js uses Euclidean distance between 128-dim descriptors.
+      // The correct threshold is distance <= 0.6 (same face), NOT 1 - distance >= 0.6.
+      // Converting to similarity via (1 - distance) breaks when distance > 1.0
+      // because Math.max(0, 1 - distance) collapses all distances > 1 to 0,
+      // making them indistinguishable.
+      const DISTANCE_THRESHOLD = 0.6;
+      const verified = distance <= DISTANCE_THRESHOLD;
+
+      // Convert to a 0–1 confidence score for display purposes only
+      // Clamp so UI always sees a positive value
+      const matchScore = Math.max(0, Math.min(1, 1 - distance / (DISTANCE_THRESHOLD * 2)));
+      const confidence = verified ? Math.max(0.5, matchScore) : matchScore;
 
       // Log verification attempt
       await this.logVerificationAttempt(
@@ -137,20 +146,20 @@ export const faceVerificationService = {
         employeeName,
         verifyType,
         verified,
-        matchScore,
+        confidence,
         location
       );
 
       return {
         verified,
-        confidence: matchScore,
+        confidence,
         matchScore,
         message: verified
-          ? `Face verified with ${Math.round(matchScore * 100)}% confidence`
-          : `Face verification failed. Similarity: ${Math.round(matchScore * 100)}%`
+          ? `Verifikasi wajah berhasil (jarak: ${distance.toFixed(3)}, threshold: ${DISTANCE_THRESHOLD})`
+          : `Verifikasi wajah gagal. Jarak: ${distance.toFixed(3)}, melebihi threshold ${DISTANCE_THRESHOLD}`
       };
     } catch (error) {
-      console.error('Error verifying face:', error);
+      logger.error('Error verifying face', error);
       return {
         verified: false,
         confidence: 0,

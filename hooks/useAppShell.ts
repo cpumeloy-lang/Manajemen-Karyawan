@@ -53,6 +53,9 @@ export const useAppShell = (): [AppShellState, AppShellActions] => {
     activePortal,
     view,
     searchTerm,
+    statusFilter,
+    departmentFilter,
+    unitFilter,
     sortKey,
     sortDirection,
   } = useUI();
@@ -115,6 +118,11 @@ export const useAppShell = (): [AppShellState, AppShellActions] => {
   const sortedAndFilteredEmployees = useMemo(() => {
     let filteredEmployees = [...employeesWithDocuments];
 
+    const normalizedSearchTerm = String(searchTerm || '').trim().toLowerCase();
+    const normalizedStatusFilter = String(statusFilter || '').trim().toLowerCase();
+    const normalizedDepartmentFilter = String(departmentFilter || '').trim().toLowerCase();
+    const normalizedUnitFilter = String(unitFilter || '').trim().toLowerCase();
+
     // Filter by unit for kepala ruangan
     if (isKepalaRuanganRole(authUser?.profile?.role)) {
       const userUnitId = authUser?.profile?.unitKerjaId;
@@ -123,10 +131,41 @@ export const useAppShell = (): [AppShellState, AppShellActions] => {
       }
     }
 
+    if (normalizedStatusFilter) {
+      filteredEmployees = filteredEmployees.filter(
+        (e) => String(e?.status || '').trim().toLowerCase() === normalizedStatusFilter
+      );
+    }
+
+    if (normalizedDepartmentFilter) {
+      filteredEmployees = filteredEmployees.filter((e) =>
+        String(e?.departemen || '').trim().toLowerCase() === normalizedDepartmentFilter
+      );
+    }
+
+    if (normalizedUnitFilter) {
+      filteredEmployees = filteredEmployees.filter((e) =>
+        String(e?.unitKerjaId || '').trim().toLowerCase() === normalizedUnitFilter
+      );
+    }
+
     // Apply search filter
-    filteredEmployees = filteredEmployees.filter((e) =>
-      String(e?.nama || '').toLowerCase().includes(String(searchTerm || '').toLowerCase())
-    );
+    if (normalizedSearchTerm) {
+      filteredEmployees = filteredEmployees.filter((e) => {
+        const searchTarget = [
+          e?.nama,
+          e?.nik,
+          e?.email,
+          e?.jabatan,
+          e?.departemen,
+          e?.unitKerjaId,
+        ]
+          .map((value) => String(value || '').toLowerCase())
+          .join(' ');
+
+        return searchTarget.includes(normalizedSearchTerm);
+      });
+    }
 
     // Apply sorting
     return filteredEmployees.sort((a, b) => {
@@ -136,7 +175,16 @@ export const useAppShell = (): [AppShellState, AppShellActions] => {
       if (aVal > bVal) return sortDirection === 'asc' ? 1 : -1;
       return 0;
     });
-  }, [employeesWithDocuments, searchTerm, sortKey, sortDirection, authUser]);
+  }, [
+    employeesWithDocuments,
+    searchTerm,
+    statusFilter,
+    departmentFilter,
+    unitFilter,
+    sortKey,
+    sortDirection,
+    authUser,
+  ]);
 
   // Count pending requests
   const pendingRequestsCount = useMemo(() => {
@@ -176,10 +224,7 @@ export const useAppShell = (): [AppShellState, AppShellActions] => {
     setActivePortal(nextPortal);
     setView(nextPortal === 'personal' ? 'personal-dashboard' : 'dashboard');
 
-    // Fire-and-forget audit logging
-    import('../services/portalContextAuditService').then((module) => {
-      void module.logPortalSwitch(previousPortal, nextPortal, source);
-    });
+    // Portal switch audit logged via main audit service if needed
   };
 
   const actions: AppShellActions = {

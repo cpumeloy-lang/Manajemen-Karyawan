@@ -44,6 +44,18 @@ describe('dataMapping', () => {
     expect(result.email).toBe('siti@example.com');
   });
 
+  it('normalizes empty reference fields to null', () => {
+    const result = mapEmployeeToDatabase({
+      nama: 'Siti',
+      email: 'siti@example.com',
+      unitKerjaId: '',
+      managedUnitId: '',
+    });
+
+    expect(result.unitKerjaId).toBeNull();
+    expect(result.managed_unit_id).toBeNull();
+  });
+
   it('maps employee fields from database to UI naming', () => {
     const input = {
       nama: 'Siti',

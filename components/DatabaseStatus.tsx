@@ -1,4 +1,5 @@
 import React, { Suspense, useEffect, useRef, useState } from 'react';
+import logger from '../services/logger.ts';
 import { supabase } from '../services/supabaseClient';
 
 const DatabaseSetup = React.lazy(() => import('./DatabaseSetup.tsx'));
@@ -18,14 +19,14 @@ const DatabaseStatus: React.FC = () => {
                 const { error } = await supabase.from('units').select('count', { count: 'exact', head: true });
                 
                 if (error) {
-                    console.error('Database connection error:', error);
+                    logger.error('Database connection error', error);
                     setError(error.message);
                     setStatus('error');
                 } else {
                     setStatus('connected');
                 }
             } catch (err: any) {
-                console.error('Connection test failed:', err);
+                logger.error('Connection test failed', err);
                 setError(err.message || 'Unknown error');
                 setStatus('error');
             }

@@ -3,6 +3,8 @@
  * Comprehensive error management with structured error codes, retry logic, and user-friendly messages
  */
 
+import logger from './logger.ts';
+
 // ============================================================================
 // ERROR CODES & TYPES
 // ============================================================================
@@ -328,7 +330,7 @@ export async function withRetry<T>(
       // Add jitter to prevent thundering herd
       const jitteredDelay = delayMs * (0.5 + Math.random() * 0.5);
 
-      console.warn(
+      logger.warn(
         `[Retry ${attempt}/${maxRetries}] ${appError.code} - ${appError.message}. ` +
         `Retrying in ${Math.round(jitteredDelay)}ms...`
       );
@@ -385,7 +387,7 @@ class ErrorLogger {
 
     // Log to console in development
     if (process.env.NODE_ENV === 'development') {
-      console.error(`[${error.code}]`, {
+      logger.error(`[${error.code}]`, undefined, {
         message: error.message,
         userMessage: error.userMessage,
         statusCode: error.statusCode,

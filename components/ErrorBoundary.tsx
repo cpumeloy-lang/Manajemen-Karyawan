@@ -1,4 +1,5 @@
 import React from 'react';
+import logger from '../services/logger.ts';
 import { AppError, classifyError, errorLogger, formatErrorForUI, ErrorCode } from '../services/errorHandlingService';
 
 interface ErrorBoundaryProps {
@@ -39,12 +40,12 @@ export default class ErrorBoundary extends React.Component<ErrorBoundaryProps, E
       this.props.onError(appError);
     }
 
-    // Log to console in development
+    // Log via centralized logger
     if (process.env.NODE_ENV === 'development') {
-      console.error(
+      logger.error(
         `[ErrorBoundary: ${this.props.componentName || 'Unknown'}]`,
         error,
-        errorInfo
+        { componentStack: errorInfo?.componentStack }
       );
     }
   }

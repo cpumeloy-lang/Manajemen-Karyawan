@@ -55,21 +55,42 @@ class DataService {
   }
 
   /**
-   * Get employee by ID
+   * Get employee by user_id (from auth) or by employee primary id.
+   * [SV-M3] Previously only filtered by user_id, causing failures when called with employee.id.
    */
   async getEmployee(id: string): Promise<DataResponse> {
     try {
+      // Primary lookup: by user_id (used during login/session bootstrap)
       const { data, error } = await dataSupabase
         .from('employees')
         .select('*')
         .eq('user_id', id)
-        .single();
+        .maybeSingle();
 
       if (error) {
         return { success: false, error: error.message };
       }
 
-      return { success: true, data };
+      if (data) {
+        return { success: true, data };
+      }
+
+      // Fallback: try by primary key 'id' (employee UUID) in case caller passes employee.id
+      const { data: dataById, error: errorById } = await dataSupabase
+        .from('employees')
+        .select('*')
+        .eq('id', id)
+        .maybeSingle();
+
+      if (errorById) {
+        return { success: false, error: errorById.message };
+      }
+
+      if (!dataById) {
+        return { success: false, error: 'Employee not found' };
+      }
+
+      return { success: true, data: dataById };
     } catch (error: any) {
       return { success: false, error: error.message };
     }

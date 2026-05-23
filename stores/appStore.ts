@@ -52,6 +52,9 @@ interface UIState {
   employeeToEdit: Employee | null;
   employeeToView: Employee | null;
   searchTerm: string;
+  statusFilter: string;
+  departmentFilter: string;
+  unitFilter: string;
   sortKey: SortKey;
   sortDirection: SortDirection;
   successMessage: string | null;
@@ -101,6 +104,9 @@ export interface AppStore extends AuthState, DataState, UIState, ErrorState {
   setEmployeeToEdit: (employee: Employee | null) => void;
   setEmployeeToView: (employee: Employee | null) => void;
   setSearchTerm: (term: string) => void;
+  setStatusFilter: (status: string) => void;
+  setDepartmentFilter: (dept: string) => void;
+  setUnitFilter: (unit: string) => void;
   setSortKey: (key: SortKey) => void;
   setSortDirection: (direction: SortDirection) => void;
   setSuccessMessage: (message: string | null) => void;
@@ -140,7 +146,9 @@ const initialDataState: DataState = {
 
 const initialUIState: UIState = {
   activePortal: null,
-  view: 'dashboard',
+  view: (typeof window !== 'undefined' && window.location.pathname.length > 1) 
+    ? (window.location.pathname.slice(1) as View) 
+    : 'dashboard',
   essDefaultTab: 'overview',
   isChangePasswordOpen: false,
   isAuditLogOpen: false,
@@ -150,6 +158,9 @@ const initialUIState: UIState = {
   employeeToEdit: null,
   employeeToView: null,
   searchTerm: '',
+  statusFilter: '',
+  departmentFilter: '',
+  unitFilter: '',
   sortKey: 'nama',
   sortDirection: 'asc',
   successMessage: null,
@@ -309,6 +320,12 @@ export const useAppStore = create<AppStore>()(
           set({ employeeToView }, false, 'setEmployeeToView'),
         setSearchTerm: (searchTerm) =>
           set({ searchTerm }, false, 'setSearchTerm'),
+        setStatusFilter: (statusFilter) =>
+          set({ statusFilter }, false, 'setStatusFilter'),
+        setDepartmentFilter: (departmentFilter) =>
+          set({ departmentFilter }, false, 'setDepartmentFilter'),
+        setUnitFilter: (unitFilter) =>
+          set({ unitFilter }, false, 'setUnitFilter'),
         setSortKey: (sortKey) =>
           set({ sortKey }, false, 'setSortKey'),
         setSortDirection: (sortDirection) =>
@@ -339,9 +356,8 @@ export const useAppStore = create<AppStore>()(
       {
         name: 'hrms-app-store',
         partialize: (state) => ({
-          // Only persist UI state, not auth/data
+          // Only persist UI state, not auth/data (view is managed by React Router URL now)
           activePortal: state.activePortal,
-          view: state.view,
           essDefaultTab: state.essDefaultTab,
           searchTerm: state.searchTerm,
           sortKey: state.sortKey,
@@ -426,6 +442,9 @@ export const useUI = () =>
       employeeToEdit: state.employeeToEdit,
       employeeToView: state.employeeToView,
       searchTerm: state.searchTerm,
+      statusFilter: state.statusFilter,
+      departmentFilter: state.departmentFilter,
+      unitFilter: state.unitFilter,
       sortKey: state.sortKey,
       sortDirection: state.sortDirection,
       successMessage: state.successMessage,
@@ -446,6 +465,9 @@ export const useUIActions = () =>
       setEmployeeToEdit: state.setEmployeeToEdit,
       setEmployeeToView: state.setEmployeeToView,
       setSearchTerm: state.setSearchTerm,
+      setStatusFilter: state.setStatusFilter,
+      setDepartmentFilter: state.setDepartmentFilter,
+      setUnitFilter: state.setUnitFilter,
       setSortKey: state.setSortKey,
       setSortDirection: state.setSortDirection,
       setSuccessMessage: state.setSuccessMessage,

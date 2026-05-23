@@ -23,28 +23,31 @@
   input:not([type='checkbox']):not([type='radio']):not([type='range']),
   select,
   textarea {
-    @apply rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm text-slate-800 shadow-sm transition-all duration-200 ease-out;
+    @apply rounded-lg px-4 py-2.5 text-sm shadow-sm transition-all duration-200 ease-out;
+    border: 1px solid var(--border-color);
+    background-color: var(--input-bg);
+    color: var(--text-color);
   }
 
   input:not([type='checkbox']):not([type='radio']):not([type='range'])::placeholder,
   textarea::placeholder {
-    color: #94a3b8;
+    color: var(--placeholder-color);
   }
 
   input:not([type='checkbox']):not([type='radio']):not([type='range']):focus,
   select:focus,
   textarea:focus {
     outline: none;
-    border-color: #06736a;
-    box-shadow: 0 0 0 4px rgba(6, 115, 106, 0.12);
+    border-color: var(--accent-color);
+    box-shadow: 0 0 0 4px var(--focus-ring);
   }
 
   input:not([type='checkbox']):not([type='radio']):not([type='range']):disabled,
   select:disabled,
   textarea:disabled {
     cursor: not-allowed;
-    background-color: #f8fafc;
-    color: #94a3b8;
+    background-color: var(--disabled-bg);
+    color: var(--placeholder-color);
   }
 
   button {
@@ -58,6 +61,131 @@
   button:active:not(:disabled) {
     transform: translateY(0);
   }
+}
+
+/* Theme variables and overrides */
+:root {
+  --bg-body: #f8fafc;
+  --card-bg: #ffffff;
+  --input-bg: #ffffff;
+  --text-color: #0f172a; /* slate-900 */
+  --muted-color: #475569; /* slate-600 */
+  --placeholder-color: #94a3b8;
+  --border-color: #e2e8f0; /* slate-300 */
+  --accent-color: #06736a;
+  --focus-ring: rgba(6,115,106,0.12);
+  --disabled-bg: #f8fafc;
+}
+
+.theme-dark {
+  /* Dark theme — tuned for readability and WCAG AA contrast compliance */
+  --bg-body: #0b1220;           /* very dark navy */
+  --card-bg: #0f1724;           /* card surface */
+  --input-bg: #0b1320;          /* slightly darker than card for inputs */
+  --text-color: #e6eef8;        /* near-white for primary text */
+  --muted-color: #b8c8d8;       /* muted text — improved contrast ~5.2:1 */
+  --text-secondary: #a0adb9;    /* secondary text level */
+  --placeholder-color: #8a9aaa; /* placeholder text — contrast ~4.8:1 */
+  --border-color: #22303a;      /* muted border */
+  --accent-color: #2dd4bf;      /* teal accent (accessible on dark) */
+  --focus-ring: rgba(45,212,191,0.12);
+  --disabled-bg: #071022;
+  --elevated-shadow: 0 6px 18px rgba(2,6,23,0.6);
+}
+
+/* Override common Tailwind utility colors when dark theme is active */
+.theme-dark .bg-white { background-color: var(--card-bg) !important; }
+.theme-dark .bg-gray-50 { background-color: #07101a !important; }
+.theme-dark .text-gray-800 { color: var(--text-color) !important; }
+.theme-dark .text-gray-700 { color: #d6e6ef !important; }
+.theme-dark .text-gray-600 { color: var(--muted-color) !important; }
+.theme-dark .text-gray-500 { color: var(--text-secondary) !important; }
+.theme-dark .text-gray-400 { color: #8a9aaa !important; }
+.theme-dark .text-slate-600 { color: var(--muted-color) !important; }
+.theme-dark .text-slate-500 { color: var(--text-secondary) !important; }
+.theme-dark .text-slate-400 { color: #8a9aaa !important; }
+
+/* Labels, helper text, captions must be readable */
+.theme-dark label { color: var(--text-color) !important; }
+.theme-dark .text-xs { color: #a0adb9 !important; }
+.theme-dark .text-sm { color: #b8c8d8 !important; }
+.theme-dark .text-gray-900 { color: var(--text-color) !important; }
+
+/* Inputs and surfaces */
+.theme-dark input,
+.theme-dark select,
+.theme-dark textarea { background-color: var(--input-bg) !important; color: var(--text-color) !important; border-color: var(--border-color) !important; }
+.theme-dark input::placeholder, .theme-dark textarea::placeholder { color: var(--placeholder-color) !important; }
+
+/* Scrollbar tweaks for dark theme */
+.theme-dark nav::-webkit-scrollbar-thumb { background: #2b3942; }
+
+a { color: inherit; }
+.theme-dark a { color: var(--accent-color); }
+
+/* Dark theme sidebar styling */
+.theme-dark aside {
+  background-color: #0f1724 !important;        /* slightly lighter than body for separation */
+  color: #e6eef8 !important;
+  border-right: 1px solid #22303a !important;
+}
+
+.theme-dark aside h1,
+.theme-dark aside h2,
+.theme-dark aside h3 { color: #ecf2f9 !important; }
+
+.theme-dark aside .text-primary { color: #2dd4bf !important; }
+
+.theme-dark aside .text-gray-400,
+.theme-dark aside .text-gray-500,
+.theme-dark aside .text-gray-600 { color: #a0adb9 !important; }
+
+.theme-dark aside .text-gray-700 { color: #b8c8d8 !important; }
+
+.theme-dark aside .bg-white { background-color: rgba(45, 212, 191, 0.08) !important; }
+
+.theme-dark aside .hover\:bg-gray-50:hover { background-color: rgba(45, 212, 191, 0.12) !important; }
+
+.theme-dark aside .border-gray-200 { border-color: #22303a !important; }
+
+/* Body background and default text */
+body { background-color: var(--bg-body); color: var(--text-color); }
+
+
+/* Sidebar Styling - Light Theme (Dark Sidebar with Light Text) */
+aside {
+  background-color: #1e293b !important;         /* dark slate background */
+  color: #f1f5f9 !important;                    /* light text color */
+  box-shadow: 2px 0 8px rgba(0, 0, 0, 0.15) !important;
+}
+
+aside h1,
+aside h2,
+aside h3 { color: #f8fafc !important; }
+
+aside .text-primary { color: #2dd4bf !important; }  /* teal accent in sidebar */
+
+aside .text-gray-400,
+aside .text-gray-500,
+aside .text-gray-600 { color: #cbd5e1 !important; }  /* light gray for muted text */
+
+aside .text-gray-700 { color: #e2e8f0 !important; }   /* lighter gray for secondary text */
+
+aside button { color: #f1f5f9 !important; }
+
+aside .bg-white { background-color: rgba(100, 116, 139, 0.1) !important; }
+
+aside .hover\:bg-gray-50:hover { background-color: rgba(148, 163, 184, 0.2) !important; }
+
+aside .border-gray-200 { border-color: #334155 !important; }
+
+/* Scrollbar in sidebar */
+aside nav::-webkit-scrollbar-thumb {
+  background: #475569;
+}
+
+aside nav::-webkit-scrollbar-thumb:hover {
+  background: #64748b;
 }
 
 /* Custom Scrollbar Styling */

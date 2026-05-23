@@ -16,7 +16,7 @@ import LoadingSpinner from './LoadingSpinner';
 
 import { isAdminRole, isHrRole, isKepalaRuanganRole } from '../utils/roleUtils';
 
-import type { View } from '../types';
+import type { Department, View, WorkUnit } from '../types';
 
 
 
@@ -26,11 +26,27 @@ interface AppHeaderProps {
 
   searchTerm: string;
 
+  statusFilter: string;
+
+  departmentFilter: string;
+
+  unitFilter: string;
+
+  departments: Department[];
+
+  workUnits: WorkUnit[];
+
   dataLoading: boolean;
 
   userRole?: string;
 
   onSearchChange: (value: string) => void;
+
+  onStatusFilterChange: (value: string) => void;
+
+  onDepartmentFilterChange: (value: string) => void;
+
+  onUnitFilterChange: (value: string) => void;
 
   onAddEmployee: () => void;
 
@@ -44,11 +60,27 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
 
   searchTerm,
 
+  statusFilter,
+
+  departmentFilter,
+
+  unitFilter,
+
+  departments,
+
+  workUnits,
+
   dataLoading,
 
   userRole,
 
   onSearchChange,
+
+  onStatusFilterChange,
+
+  onDepartmentFilterChange,
+
+  onUnitFilterChange,
 
   onAddEmployee,
 
@@ -68,13 +100,13 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
 
         {(isEmployeeTableView || isEmployeeViewOnly) ? (
 
-          <div className="flex-1 max-w-lg">
+          <div className="flex-1 max-w-4xl space-y-3">
 
             <input
 
               type="text"
 
-              placeholder="Cari nama karyawan..."
+              placeholder="Cari NIK, nama, email, jabatan, atau departemen..."
 
               value={searchTerm}
 
@@ -83,6 +115,94 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
               className="w-full px-4 py-2 border rounded-lg shadow-sm focus:ring-[#06736a] focus:border-[#06736a]"
 
             />
+
+            {isEmployeeTableView && (
+
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+
+                <select
+
+                  value={statusFilter}
+
+                  onChange={(e) => onStatusFilterChange(e.target.value)}
+
+                  title="Filter status karyawan"
+
+                  aria-label="Filter status karyawan"
+
+                  className="w-full px-3 py-2 border rounded-lg shadow-sm focus:ring-[#06736a] focus:border-[#06736a] bg-white"
+
+                >
+
+                  <option value="">Semua Status</option>
+
+                  <option value="Aktif">Aktif</option>
+
+                  <option value="Cuti">Cuti</option>
+
+                  <option value="Non-Aktif">Non-Aktif</option>
+
+                </select>
+
+                <select
+
+                  value={departmentFilter}
+
+                  onChange={(e) => onDepartmentFilterChange(e.target.value)}
+
+                  title="Filter departemen"
+
+                  aria-label="Filter departemen"
+
+                  className="w-full px-3 py-2 border rounded-lg shadow-sm focus:ring-[#06736a] focus:border-[#06736a] bg-white"
+
+                >
+
+                  <option value="">Semua Departemen</option>
+
+                  {departments.map((department) => (
+
+                    <option key={department.id} value={department.nama}>
+
+                      {department.nama}
+
+                    </option>
+
+                  ))}
+
+                </select>
+
+                <select
+
+                  value={unitFilter}
+
+                  onChange={(e) => onUnitFilterChange(e.target.value)}
+
+                  title="Filter unit kerja"
+
+                  aria-label="Filter unit kerja"
+
+                  className="w-full px-3 py-2 border rounded-lg shadow-sm focus:ring-[#06736a] focus:border-[#06736a] bg-white"
+
+                >
+
+                  <option value="">Semua Unit Kerja</option>
+
+                  {workUnits.map((unit) => (
+
+                    <option key={unit.id} value={unit.id}>
+
+                      {unit.nama}
+
+                    </option>
+
+                  ))}
+
+                </select>
+
+              </div>
+
+            )}
 
           </div>
 

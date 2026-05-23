@@ -96,7 +96,8 @@ export async function getSchedulesByEmployee(
 }
 
 export async function getTodaySchedule(employeeId: string): Promise<EmployeeSchedule | null> {
-    const today = new Date().toISOString().split('T')[0];
+    // [SV-M5] Use WITA (Asia/Makassar) to ensure correct date boundary
+    const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Makassar' });
     const { data, error } = await supabase
         .from('employee_schedules')
         .select('*')
@@ -160,10 +161,10 @@ export async function generateBulkSchedules(
     const results: Record<string, number> = {};
     let total = 0;
 
-    for (let i = 0; i < employeeIds.length; i++) {
+    const promises = employeeIds.map(async (employeeId, i) => {
         const offset = staggerOffset > 0 ? (i * staggerOffset) : 0;
         const count = await generateScheduleFromPattern({
-            employeeId: employeeIds[i],
+            employeeId,
             unitId,
             patternId,
             startDate,
@@ -171,8 +172,14 @@ export async function generateBulkSchedules(
             rotationOffset: offset,
             createdBy,
         });
-        results[employeeIds[i]] = count;
-        total += count;
+        return { employeeId, count };
+    });
+
+    const promiseResults = await Promise.all(promises);
+    
+    for (const res of promiseResults) {
+        results[res.employeeId] = res.count;
+        total += res.count;
     }
 
     return { total, perEmployee: results };
@@ -234,40 +241,67 @@ export async function requestSwapShift(
     const s1 = schedules.find((s: any) => s.id === scheduleId1) as any;
     const s2 = schedules.find((s: any) => s.id === scheduleId2) as any;
 
-    // Swap shift data between the two
     const now = new Date().toISOString();
 
-    await supabase
+    // [SV-K7] Atomic swap: execute first update, then second.
+    // If second fails, attempt compensating reversal of the first to preserve consistency.
+    const update1Payload = {
+        shift_name: s2.shift_name,
+        shift_start_time: s2.shift_start_time,
+        shift_end_time: s2.shift_end_time,
+        is_off_day: s2.is_off_day,
+        status: 'swapped',
+        swapped_with_employee_id: s2.employee_id,
+        swapped_with_schedule_id: scheduleId2,
+        swap_reason: reason,
+        swap_approved_by: approvedBy,
+        swap_approved_at: now,
+    };
+
+    const update2Payload = {
+        shift_name: s1.shift_name,
+        shift_start_time: s1.shift_start_time,
+        shift_end_time: s1.shift_end_time,
+        is_off_day: s1.is_off_day,
+        status: 'swapped',
+        swapped_with_employee_id: s1.employee_id,
+        swapped_with_schedule_id: scheduleId1,
+        swap_reason: reason,
+        swap_approved_by: approvedBy,
+        swap_approved_at: now,
+    };
+
+    const { error: err1 } = await (supabase as any)
         .from('employee_schedules')
-        .update({
-            shift_name: s2.shift_name,
-            shift_start_time: s2.shift_start_time,
-            shift_end_time: s2.shift_end_time,
-            is_off_day: s2.is_off_day,
-            status: 'swapped',
-            swapped_with_employee_id: s2.employee_id,
-            swapped_with_schedule_id: scheduleId2,
-            swap_reason: reason,
-            swap_approved_by: approvedBy,
-            swap_approved_at: now,
-        } as any)
+        .update(update1Payload)
         .eq('id', scheduleId1);
 
-    await supabase
+    if (err1) throw new Error(`Gagal swap jadwal pertama: ${err1.message}`);
+
+    const { error: err2 } = await (supabase as any)
         .from('employee_schedules')
-        .update({
-            shift_name: s1.shift_name,
-            shift_start_time: s1.shift_start_time,
-            shift_end_time: s1.shift_end_time,
-            is_off_day: s1.is_off_day,
-            status: 'swapped',
-            swapped_with_employee_id: s1.employee_id,
-            swapped_with_schedule_id: scheduleId1,
-            swap_reason: reason,
-            swap_approved_by: approvedBy,
-            swap_approved_at: now,
-        } as any)
+        .update(update2Payload)
         .eq('id', scheduleId2);
+
+    if (err2) {
+        // Compensating rollback: revert the first update back to original values
+        await (supabase as any)
+            .from('employee_schedules')
+            .update({
+                shift_name: s1.shift_name,
+                shift_start_time: s1.shift_start_time,
+                shift_end_time: s1.shift_end_time,
+                is_off_day: s1.is_off_day,
+                status: s1.status,
+                swapped_with_employee_id: null,
+                swapped_with_schedule_id: null,
+                swap_reason: null,
+                swap_approved_by: null,
+                swap_approved_at: null,
+            } as any)
+            .eq('id', scheduleId1);
+        throw new Error(`Gagal swap jadwal kedua (perubahan pertama telah dibatalkan): ${err2.message}`);
+    }
 }
 
 // ============================================================

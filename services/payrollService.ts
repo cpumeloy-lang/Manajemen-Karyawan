@@ -1,14 +1,22 @@
 import { Employee, AttendanceRecord, Payslip, SystemSettings } from '../types.ts';
 
 // Default rates (can be overridden via SystemSettings)
-const DEFAULT_BPJS_KESEHATAN_RATE = 0.01;       // 1% for employee
-const DEFAULT_BPJS_KESEHATAN_MAX_WAGE = 12000000;
+const DEFAULT_BPJS_KESEHATAN_RATE = 0.01;               // 1% for employee
+const DEFAULT_BPJS_KESEHATAN_MAX_WAGE = 12000000;       // Cap: Rp 12 juta
+// BPJS Ketenagakerjaan (employee portion)
+// JHT = 2%, JP = 1% (capped at wage ceiling) — per PP 46/2015 & PP 35/2021
+const DEFAULT_JHT_RATE = 0.02;                          // Jaminan Hari Tua
+const DEFAULT_JP_RATE = 0.01;                           // Jaminan Pensiun
+const DEFAULT_JP_MAX_WAGE = 9077600;                    // JP wage ceiling 2024
 const DEFAULT_OVERTIME_RATE_PER_HOUR = 30000;
 
 export interface PayrollConfig {
     overtimeRatePerHour: number;
     bpjsKesehatanRate: number;
     bpjsKesehatanMaxWage: number;
+    jhtRate: number;
+    jpRate: number;
+    jpMaxWage: number;
 }
 
 /** Build payroll config from SystemSettings, fallback to defaults */
@@ -17,6 +25,9 @@ export function buildPayrollConfig(settings?: Partial<SystemSettings> | null): P
         overtimeRatePerHour:  settings?.overtime_rate_per_hour  ?? DEFAULT_OVERTIME_RATE_PER_HOUR,
         bpjsKesehatanRate:    settings?.bpjs_kesehatan_rate     ?? DEFAULT_BPJS_KESEHATAN_RATE,
         bpjsKesehatanMaxWage: settings?.bpjs_kesehatan_max_wage ?? DEFAULT_BPJS_KESEHATAN_MAX_WAGE,
+        jhtRate:              DEFAULT_JHT_RATE,
+        jpRate:               DEFAULT_JP_RATE,
+        jpMaxWage:            DEFAULT_JP_MAX_WAGE,
     };
 }
 
@@ -86,26 +97,41 @@ export const calculatePayslip = (
 
     const totalPendapatan = gajiPokok + tunjanganProfesi + upahLembur;
 
-    // BPJS Calculation (Kesehatan up to max wage)
+    // ── BPJS Kesehatan ──────────────────────────────────────────────────────
+    // Employee portion: 1% of wage, capped at Rp 12 juta/month
     const bpjsWageBase = Math.min(gajiPokok, cfg.bpjsKesehatanMaxWage);
-    const potonganBPJS = bpjsWageBase * cfg.bpjsKesehatanRate;
+    const potonganBPJSKesehatan = Math.round(bpjsWageBase * cfg.bpjsKesehatanRate);
 
-    // PPh 21 Calculation
+    // ── BPJS Ketenagakerjaan ─────────────────────────────────────────────────
+    // [SV-K2] JHT: 2% of gaji pokok (no cap for employee portion)
+    const potonganJHT = Math.round(gajiPokok * cfg.jhtRate);
+    // JP: 1% of wage, capped at JP wage ceiling (2024: Rp 9,077,600)
+    const jpWageBase = Math.min(gajiPokok, cfg.jpMaxWage);
+    const potonganJP = Math.round(jpWageBase * cfg.jpRate);
+    const potonganBPJSKetenagakerjaan = potonganJHT + potonganJP;
+
+    // ── PPh 21 Calculation ───────────────────────────────────────────────────
+    // [SV-K3] Per PMK 168/2023, BPJS contributions are deductible (pengurang bruto)
+    // before calculating PKP. Previously missing — caused over-taxation.
     const annualGrossIncome = totalPendapatan * 12;
-    const biayaJabatanAnnual = Math.min(annualGrossIncome * 0.05, 6000000); // Max 6M per year
-    
-    const annualNetIncome = annualGrossIncome - biayaJabatanAnnual;
+    const biayaJabatanAnnual = Math.min(annualGrossIncome * 0.05, 6_000_000); // Max Rp 6 juta/tahun
+    // BPJS deductibles are annualized
+    const annualBPJSDeductible = (potonganBPJSKesehatan + potonganBPJSKetenagakerjaan) * 12;
+    const annualNetIncome = annualGrossIncome - biayaJabatanAnnual - annualBPJSDeductible;
     const ptkp = getPTKP(employee);
     const pkp = Math.max(annualNetIncome - ptkp, 0);
-    
-    const annualPPh21 = calculateAnnualPPh21(pkp);
-    const potonganPPh21 = annualPPh21 / 12;
 
-    const totalPotongan = potonganPPh21 + potonganBPJS;
+    const annualPPh21 = calculateAnnualPPh21(pkp);
+    const potonganPPh21 = Math.round(annualPPh21 / 12);
+
+    // Legacy alias (BPJS field in Payslip type was previously only Kesehatan)
+    const potonganBPJS = potonganBPJSKesehatan;
+
+    const totalPotongan = potonganPPh21 + potonganBPJS + potonganBPJSKetenagakerjaan;
     const gajiBersih = totalPendapatan - totalPotongan;
 
     return {
-        id: `payslip-${employee.id}-${period.replace(' ', '-')}`,
+        id: `payslip-${employee.id}-${period.replaceAll(' ', '-')}`,
         employeeId: employee.id,
         periode: period,
         gajiPokok,
@@ -114,6 +140,11 @@ export const calculatePayslip = (
         totalPendapatan,
         potonganPPh21,
         potonganBPJS,
+        // Extended fields for full transparency
+        potonganBPJSKesehatan,
+        potonganBPJSKetenagakerjaan,
+        potonganJHT,
+        potonganJP,
         totalPotongan,
         gajiBersih,
     };

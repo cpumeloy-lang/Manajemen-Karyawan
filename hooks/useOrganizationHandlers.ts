@@ -6,6 +6,8 @@ import { useMessageHandlers } from './useMessageHandlers';
 import { canManageOrganization, ensurePortalAccess } from '../services/portalAccessService';
 import { createAuditLog } from '../services/auditLogService';
 import { useConfirm } from '../components/ConfirmDialog';
+import { getAuthHeaders } from '../utils/apiUtils.ts';
+import { dataService } from '../services/DataService.ts';
 
 export const useOrganizationHandlers = () => {
   const confirm = useConfirm();
@@ -14,12 +16,6 @@ export const useOrganizationHandlers = () => {
   const { activePortal } = useUI();
   const { setWorkUnits, setDepartments, setPositions, setEmployees } = useAppDataActions();
   const { showSuccess, showError } = useMessageHandlers();
-
-  const getAuthHeaders = async () => {
-    const { data } = await supabase.auth.getSession();
-    const token = data.session?.access_token;
-    return token ? { Authorization: `Bearer ${token}` } : {};
-  };
 
   const ensureCanManageMasterData = (actionLabel: string): boolean => {
     const portalError = ensurePortalAccess(activePortal, 'operational', actionLabel);
@@ -125,10 +121,14 @@ export const useOrganizationHandlers = () => {
         const result = await response.json().catch(() => null);
         if (!response.ok) throw new Error(result?.error || 'Gagal menghapus unit kerja');
 
+        const unitName = workUnits.find((u) => u.id === id)?.nama;
         setWorkUnits((prev) => prev.filter((u) => u.id !== id));
-        setEmployees((prev) =>
-          prev.map((e) => (e.unitKerjaId === id ? { ...e, unitKerjaId: undefined } : e))
-        );
+        
+        // [HK-M5] Fetch real data instead of guessing by string name
+        const employeesResponse = await dataService.getEmployees();
+        if (employeesResponse.success && employeesResponse.data) {
+          setEmployees(employeesResponse.data);
+        }
 
         await createAuditLog({
           action: 'DELETE',
@@ -240,9 +240,12 @@ export const useOrganizationHandlers = () => {
 
         const deptName = departments.find((d) => d.id === id)?.nama;
         setDepartments((prev) => prev.filter((d) => d.id !== id));
-        setEmployees((prev) =>
-          prev.map((e) => (e.departemen === deptName ? { ...e, departemen: '' } : e))
-        );
+        
+        // [HK-M5] Fetch real data instead of guessing by string name
+        const employeesResponse = await dataService.getEmployees();
+        if (employeesResponse.success && employeesResponse.data) {
+          setEmployees(employeesResponse.data);
+        }
 
         await createAuditLog({
           action: 'DELETE',
@@ -354,9 +357,12 @@ export const useOrganizationHandlers = () => {
 
         const posName = positions.find((p) => p.id === id)?.nama;
         setPositions((prev) => prev.filter((p) => p.id !== id));
-        setEmployees((prev) =>
-          prev.map((e) => (e.jabatan === posName ? { ...e, jabatan: '' } : e))
-        );
+        
+        // [HK-M5] Fetch real data instead of guessing by string name
+        const employeesResponse = await dataService.getEmployees();
+        if (employeesResponse.success && employeesResponse.data) {
+          setEmployees(employeesResponse.data);
+        }
 
         await createAuditLog({
           action: 'DELETE',

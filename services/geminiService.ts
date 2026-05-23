@@ -1,4 +1,5 @@
 import { GoogleGenAI } from "@google/genai";
+import logger from './logger.ts';
 
 // Initialize AI only if API key is available
 const apiKey = process.env.API_KEY as string;
@@ -14,7 +15,7 @@ export const generateJobDescription = async (
     try {
         // Check if AI is available
         if (!ai) {
-            console.warn("Gemini API key not configured. Using default job description.");
+            logger.warn('Gemini API key not configured. Using default job description.');
             return `Deskripsi pekerjaan untuk posisi ${jabatan} di departemen ${departemen} akan dibuat secara manual.`;
         }
 
@@ -39,7 +40,7 @@ export const generateJobDescription = async (
 
         return response.text;
     } catch (error) {
-        console.error("Error generating job description:", error);
+        logger.error('Error generating job description', error);
         return "Gagal membuat deskripsi pekerjaan. Silakan coba lagi.";
     }
 };

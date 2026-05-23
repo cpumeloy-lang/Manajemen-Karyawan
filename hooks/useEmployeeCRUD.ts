@@ -1,4 +1,5 @@
-import { useCallback } from 'react';
+import { useCallback, useRef } from 'react';
+import logger from '../services/logger.ts';
 
 import { supabase } from '../services/supabaseClient';
 
@@ -13,6 +14,7 @@ import { useMessageHandlers } from './useMessageHandlers';
 import { mapEmployeeToDatabase, mapEmployeeFromDatabase } from '../utils/dataMapping';
 
 import { sanitizeDateFields } from '../utils/dateUtils';
+import { getAuthHeaders } from '../utils/apiUtils.ts';
 
 import { canManageEmployees, ensurePortalAccess } from '../services/portalAccessService';
 
@@ -30,26 +32,23 @@ export const useEmployeeCRUD = () => {
 
   const { authUser } = useAuth();
 
-  const { activePortal } = useUI();
+  const { activePortal, employeeToView } = useUI();
 
   const { setEmployees, setDocuments } = useAppDataActions();
 
-  const { setIsFormOpen, setEmployeeToEdit } = useUIActions();
+  const { setIsFormOpen, setEmployeeToEdit, setEmployeeToView } = useUIActions();
 
-  const { showSuccess, showError } = useMessageHandlers();
+  const { showSuccess, showError } = useMessageHandlers();  // [HK-K5] Track setTimeout ID to clear on unmount or before new operation
+  const formCloseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-
-
-  const getAuthHeaders = async () => {
-
-    const { data } = await supabase.auth.getSession();
-
-    const token = data.session?.access_token;
-
-    return token ? { Authorization: `Bearer ${token}` } : {};
-
+  const scheduleFormClose = (delay = 2000) => {
+    if (formCloseTimerRef.current) clearTimeout(formCloseTimerRef.current);
+    formCloseTimerRef.current = setTimeout(() => {
+      formCloseTimerRef.current = null;
+      setIsFormOpen(false);
+      setEmployeeToEdit(null);
+    }, delay);
   };
-
 
 
   const ensureCanManageEmployeeData = (actionLabel: string): boolean => {
@@ -106,49 +105,28 @@ export const useEmployeeCRUD = () => {
 
           // UPDATE EMPLOYEE
 
-          await updateEmployee(employeeData as Employee, newPassword);
+          await updateEmployee(employeeData as Employee, newPassword, Array.isArray((employeeData as any).documents) ? (employeeData as any).documents : []);
 
-          // Tunggu sebentar agar user bisa melihat success message sebelum form tertutup
-
-          setTimeout(() => {
-
-            setIsFormOpen(false);
-
-            setEmployeeToEdit(null);
-
-          }, 2000);
+          // [HK-K5] Use tracked timer to close form after success message
+          scheduleFormClose();
 
         } else if ('password' in employeeData) {
 
           // CREATE EMPLOYEE (with login)
 
-          await createEmployeeWithLogin(employeeData, []);
+          await createEmployeeWithLogin(employeeData, Array.isArray((employeeData as any).documents) ? (employeeData as any).documents : []);
 
-          // Tunggu sebentar agar user bisa melihat success message sebelum form tertutup
-
-          setTimeout(() => {
-
-            setIsFormOpen(false);
-
-            setEmployeeToEdit(null);
-
-          }, 2000);
+          // [HK-K5] Use tracked timer to close form after success message
+          scheduleFormClose();
 
         } else {
 
           // CREATE EMPLOYEE (profile only)
 
-          await createEmployee(employeeData, []);
+          await createEmployee(employeeData, Array.isArray((employeeData as any).documents) ? (employeeData as any).documents : []);
 
-          // Tunggu sebentar agar user bisa melihat success message sebelum form tertutup
-
-          setTimeout(() => {
-
-            setIsFormOpen(false);
-
-            setEmployeeToEdit(null);
-
-          }, 2000);
+          // [HK-K5] Use tracked timer to close form after success message
+          scheduleFormClose();
 
         }
 
@@ -176,7 +154,8 @@ export const useEmployeeCRUD = () => {
 
     employeeData: Employee,
 
-    newPassword?: string
+    newPassword?: string,
+    documents: any[] = []
 
   ) => {
 
@@ -192,9 +171,9 @@ export const useEmployeeCRUD = () => {
 
 
 
-    console.log('[updateEmployee] Sending update for ID:', id);
+    logger.debug('[updateEmployee] Sending update', { id });
 
-    console.log('[updateEmployee] Payload keys:', Object.keys(updateData));
+    logger.debug('[updateEmployee] Payload keys', { keys: Object.keys(updateData) });
 
 
 
@@ -212,7 +191,7 @@ export const useEmployeeCRUD = () => {
 
       },
 
-      body: JSON.stringify({ updateData }),
+      body: JSON.stringify({ updateData, documents, ...(newPassword && { newPassword }) }),
 
     });
 
@@ -246,7 +225,7 @@ export const useEmployeeCRUD = () => {
 
 
 
-    console.log('[updateEmployee] DB returned updated nama:', updatedEmployee.nama);
+    logger.debug('[updateEmployee] DB returned updated', { nama: updatedEmployee.nama });
 
 
 
@@ -268,13 +247,22 @@ export const useEmployeeCRUD = () => {
 
 
 
-    // Update local state IMMEDIATELY (optimistic update)
-
+    // Update local state after successful database response
     setEmployees((prev) =>
-
       prev.map((e) => (e.id === id ? employeeWithCompensation : e))
-
     );
+    // Keep detail drawer in sync if it's currently viewing this employee
+    try {
+      if (employeeToView && employeeToView.id === id) {
+        setEmployeeToView(employeeWithCompensation);
+      }
+    } catch (syncErr) {
+      logger.warn('[updateEmployee] sync employeeToView failed', { error: syncErr?.message });
+    }
+
+    if (Array.isArray(documents)) {
+      await reloadDocuments(id);
+    }
 
 
 
@@ -424,7 +412,7 @@ export const useEmployeeCRUD = () => {
 
       // Reload documents
 
-      await reloadDocuments();
+      await reloadDocuments(newEmployee.id);
 
     }
 
@@ -550,7 +538,7 @@ export const useEmployeeCRUD = () => {
 
     if (documents.length > 0) {
 
-      await reloadDocuments();
+      await reloadDocuments(newEmployee.id);
 
     }
 
@@ -588,10 +576,6 @@ export const useEmployeeCRUD = () => {
 
     });
 
-
-
-    return newEmployee;
-
     // Trigger server-side cache invalidation (best-effort)
 
     try {
@@ -613,6 +597,8 @@ export const useEmployeeCRUD = () => {
       // ignore
 
     }
+
+    return newEmployee;
 
   };
 
@@ -694,7 +680,7 @@ export const useEmployeeCRUD = () => {
 
     if (docsToAdd.length > 0 || docIdsToDelete.length > 0) {
 
-      await reloadDocuments();
+      await reloadDocuments(employeeId);
 
     }
 
@@ -812,13 +798,25 @@ export const useEmployeeCRUD = () => {
 
 
 
-  const reloadDocuments = async () => {
+  const reloadDocuments = async (employeeId?: string) => {
 
-    const { data: finalDocs, error: finalDocsError } = await supabase
+    let query = supabase
 
       .from('documents')
 
       .select('*');
+
+    if (employeeId) {
+
+      query = query.eq('employeeId', employeeId);
+
+    } else {
+
+      query = query.limit(5000);
+
+    }
+
+    const { data: finalDocs, error: finalDocsError } = await query;
 
 
 
@@ -832,7 +830,13 @@ export const useEmployeeCRUD = () => {
 
     }
 
-
+    if (employeeId) {
+      setDocuments((prev) => {
+        const remaining = prev.filter((doc) => doc.employeeId !== employeeId);
+        return [...remaining, ...((finalDocs || []) as any[])];
+      });
+      return;
+    }
 
     setDocuments((finalDocs || []) as any);
 
@@ -864,15 +868,23 @@ export const useEmployeeCRUD = () => {
 
 
 
-      const passToUse = newPassword || prompt(`Masukkan password baru untuk karwayan ${employee.nama}:`);
+      const passToUse = String(newPassword || '').trim();
 
-      
+      if (!passToUse) {
 
-      if (!passToUse || passToUse.trim().length < 6) {
+        showError('Password baru harus diisi melalui modal input.', '');
+
+        return false;
+
+      }
+
+
+
+      if (passToUse.length < 6) {
 
         showError('Password baru harus diisi minimal 6 karakter.', '');
 
-        return;
+        return false;
 
       }
 
@@ -894,7 +906,7 @@ export const useEmployeeCRUD = () => {
 
         if (!ok) {
 
-          return;
+          return false;
 
         }
 
@@ -946,9 +958,13 @@ export const useEmployeeCRUD = () => {
 
         showSuccess(`✅ Password untuk ${employee.nama} berhasil direset dan email konfirmasi telah dikirim.`);
 
+        return true;
+
       } catch (error: any) {
 
         showError('Gagal mereset password akun', error);
+
+        return false;
 
       }
 

@@ -1,4 +1,5 @@
 import React, { useRef, useEffect, useState } from 'react';
+import logger from '../services/logger.ts';
 import * as faceapi from 'face-api.js';
 import { livenessDetectionService } from '../services/livenessDetectionService.ts';
 import { XMarkIcon } from './icons.tsx';
@@ -45,7 +46,7 @@ const SelfieCamera: React.FC<SelfieCameraProps> = ({ isOpen, onClose, onCapture,
             ]);
             setModelsLoaded(true);
         } catch (err) {
-            console.error('Error loading face-api models:', err);
+            logger.error('Error loading face-api models', err);
             setError('Gagal memuat model face detection. Pastikan koneksi internet stabil.');
         }
     };
@@ -72,7 +73,7 @@ const SelfieCamera: React.FC<SelfieCameraProps> = ({ isOpen, onClose, onCapture,
                 // Expected during React strict mode or rapid mount/unmount — not a real error
                 return;
             }
-            console.error("Error accessing camera:", err);
+            logger.error('Error accessing camera', err);
             setError("Gagal mengakses kamera. Pastikan Anda memberikan izin akses kamera ke browser ini.");
         }
     };
@@ -125,7 +126,7 @@ const SelfieCamera: React.FC<SelfieCameraProps> = ({ isOpen, onClose, onCapture,
                     }
                     setLivenessStatus('passed');
                 } catch (livenessErr) {
-                    console.error('Liveness detection error:', livenessErr);
+                    logger.error('Liveness detection error', livenessErr);
                     setError('Gagal melakukan liveness check. Coba lagi.');
                     setIsProcessing(false);
                     return;
@@ -167,7 +168,7 @@ const SelfieCamera: React.FC<SelfieCameraProps> = ({ isOpen, onClose, onCapture,
                             return;
                         }
                     } catch (faceErr) {
-                        console.error('Face detection error:', faceErr);
+                        logger.error('Face detection error', faceErr);
                         setError('Gagal mendeteksi wajah. Coba lagi.');
                         setIsProcessing(false);
                         return;
@@ -178,7 +179,7 @@ const SelfieCamera: React.FC<SelfieCameraProps> = ({ isOpen, onClose, onCapture,
                 stopCamera();
             }, 'image/jpeg', 0.8);
         } catch (err) {
-            console.error('Capture error:', err);
+            logger.error('Capture error', err);
             setError('Gagal mengambil foto. Coba lagi.');
         } finally {
             setIsProcessing(false);

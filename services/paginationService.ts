@@ -26,6 +26,7 @@ export interface PaginationParams {
   sortBy?: string;
   sortOrder?: SortOrder;
   search?: string;
+  searchColumns?: string[]; // [SV-M4] Define explicit columns to search
   filters?: Record<string, any>;
 }
 
@@ -74,12 +75,8 @@ class PaginationService {
         query = query.ilike('nama', `%${search}%`);
       }
 
-      // Get total count
-      const { count, error: countError } = await query;
-      if (countError) throw countError;
-
-      // Get paginated data
-      const { data, error: dataError } = await query
+      // Get paginated data and total count in a single query
+      const { data, count, error: dataError } = await query
         .range(from, to)
         .order(sortBy, { ascending: sortOrder === 'asc' });
 
@@ -209,10 +206,15 @@ class PaginationService {
         });
       }
 
-      // Apply search if specified
-      if (search && params.sortBy) {
-        // Search on the sort column (usually a name field)
-        query = query.ilike(params.sortBy, `%${search}%`);
+      // [SV-M4] Apply search on specified search columns rather than assuming sortBy is searchable
+      if (search) {
+        if (params.searchColumns && params.searchColumns.length > 0) {
+          const orQuery = params.searchColumns.map(col => `${col}.ilike.%${search}%`).join(',');
+          query = query.or(orQuery);
+        } else if (params.sortBy && !['created_at', 'tanggal', 'uploadedAt', 'id'].includes(params.sortBy)) {
+          // Legacy fallback: if no searchColumns provided, try to search on sortBy if it seems like a string column
+          query = query.ilike(params.sortBy, `%${search}%`);
+        }
       }
 
       // Get total count

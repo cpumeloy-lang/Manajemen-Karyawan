@@ -486,7 +486,13 @@ export const useAttendanceHandlers = () => {
         .eq('status', 'pending');
 
       if (updateError) {
-        showError('Gagal update status request', updateError);
+        // [HK-K7] Compensating rollback: status update failed but attendance was already saved.
+        // Attempt to delete the attendance record we just saved to prevent inconsistent state
+        // where attendance is changed but the request is still 'pending' (HR could double-approve).
+        if (savedRow?.id) {
+          await supabase.from('attendance').delete().eq('id', savedRow.id);
+        }
+        showError('Gagal update status request — perubahan absensi telah dibatalkan', updateError);
         return false;
       }
 

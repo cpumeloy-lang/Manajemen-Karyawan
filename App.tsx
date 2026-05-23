@@ -17,6 +17,7 @@
  */
 
 import React, { Suspense } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useAppInitialization } from './hooks/useAppInitialization.ts';
 import { useAuthHandlers } from './hooks/useAuthHandlers.ts';
 import { useEmployeeCRUD } from './hooks/useEmployeeCRUD.ts';
@@ -66,7 +67,7 @@ const AppContent: React.FC = () => {
   const { error: appError, isDatabaseError } = useAppError();
 
   // UI state & actions
-  const { setView, setIsFormOpen, setEmployeeToEdit, setIsDetailOpen, setEmployeeToView, setIsChangePasswordOpen, setSearchTerm, setEssDefaultTab } = useUIActions();
+  const { setView, setIsFormOpen, setEmployeeToEdit, setIsDetailOpen, setEmployeeToView, setIsChangePasswordOpen, setSearchTerm, setStatusFilter, setDepartmentFilter, setUnitFilter, setEssDefaultTab } = useUIActions();
   const { isChangePasswordOpen, isLoggingOut } = useUI();
 
   // Shell state (portal/view/derived data)
@@ -87,7 +88,7 @@ const AppContent: React.FC = () => {
   const { employees, workUnits, departments, positions, systemSettings, attendanceRecords, allRequests, documents, dataLoading } = useAppData();
 
   // UI state for forms/modals
-  const { isFormOpen, employeeToEdit, isDetailOpen, employeeToView, searchTerm, sortKey, sortDirection, essDefaultTab } = useUI();
+  const { isFormOpen, employeeToEdit, isDetailOpen, employeeToView, searchTerm, statusFilter, departmentFilter, unitFilter, sortKey, sortDirection, essDefaultTab } = useUI();
 
   // ====================================================================
   // EARLY RETURNS (after all hooks are called)
@@ -228,9 +229,17 @@ const AppContent: React.FC = () => {
           <AppHeader
             effectiveView={effectiveView}
             searchTerm={searchTerm}
+            statusFilter={statusFilter}
+            departmentFilter={departmentFilter}
+            unitFilter={unitFilter}
+            departments={departments}
+            workUnits={workUnits}
             dataLoading={dataLoading}
             userRole={authUser.profile.role}
             onSearchChange={setSearchTerm}
+            onStatusFilterChange={setStatusFilter}
+            onDepartmentFilterChange={setDepartmentFilter}
+            onUnitFilterChange={setUnitFilter}
             onAddEmployee={() => {
               setEmployeeToEdit(null);
               setIsFormOpen(true);
@@ -330,12 +339,40 @@ const AppContent: React.FC = () => {
   );
 };
 
+
+const RouterSync: React.FC = () => {
+  const { view } = useUI();
+  const { setView } = useUIActions();
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  // 1. URL -> State (When user clicks back/forward or Link)
+  React.useEffect(() => {
+    const pathView = location.pathname.slice(1) || 'dashboard';
+    if (pathView !== view) {
+      setView(pathView as View);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.pathname, setView]);
+
+  // 2. State -> URL (When internal buttons call setView)
+  React.useEffect(() => {
+    const path = `/${view}`;
+    if (location.pathname !== path) {
+      navigate(path);
+    }
+  }, [view, navigate, location.pathname]);
+
+  return null;
+};
+
 /**
  * Main App wrapper - Wraps content with error boundary to fix hook order violations
  */
 const App: React.FC = () => {
   return (
     <ErrorBoundary>
+      <RouterSync />
       <AppContent />
     </ErrorBoundary>
   );

@@ -1,4 +1,5 @@
 import { supabase } from './supabaseClient';
+import logger from './logger.ts';
 
 // Mapping departemen ke kode singkat
 const DEPARTMENT_CODES: Record<string, string> = {
@@ -29,7 +30,7 @@ export const generateNIK = async (departemen: string, hireDate: string): Promise
             .limit(1);
         
         if (error) {
-            console.error('Error fetching existing NIKs:', error);
+            logger.error('Error fetching existing NIKs', error);
             // Fallback: return basic NIK
             return `${year}-${deptCode}-001`;
         }
@@ -53,7 +54,7 @@ export const generateNIK = async (departemen: string, hireDate: string): Promise
         return `${year}-${deptCode}-${sequence}`;
         
     } catch (error) {
-        console.error('Error generating NIK:', error);
+        logger.error('Error generating NIK', error);
         // Fallback jika ada error
         const year = new Date(hireDate).getFullYear();
         const deptCode = DEPARTMENT_CODES[departemen] || 'GEN';
@@ -83,13 +84,13 @@ export const isNIKUnique = async (nik: string, excludeEmployeeId?: string): Prom
         const { data, error } = await query;
         
         if (error) {
-            console.error('Error checking NIK uniqueness:', error);
+            logger.error('Error checking NIK uniqueness', error);
             return false;
         }
         
         return !data || data.length === 0;
     } catch (error) {
-        console.error('Error in isNIKUnique:', error);
+        logger.error('Error in isNIKUnique', error);
         return false;
     }
 };

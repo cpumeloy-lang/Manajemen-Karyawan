@@ -4,6 +4,7 @@
  */
 
 import { dataSupabase } from './dataSupabaseClient';
+import logger from './logger.ts';
 
 export enum Permission {
   READ_EMPLOYEE = 'read:employee',
@@ -84,10 +85,10 @@ const ROLE_PERMISSIONS: Record<UserRole, string[]> = {
     Permission.MANAGE_SETTINGS,
     Permission.VIEW_AUDIT_LOG,
     Permission.MANAGE_USERS,
+    // [SV-M2] Raw strings below have no enum equivalent — kept for backward compat
     'read:all_employees',
     'read:all_attendance',
     'create:attendance',
-    'update:attendance',
     'delete:attendance',
     'approve:requests',
     'reject:requests',
@@ -99,7 +100,7 @@ const ROLE_PERMISSIONS: Record<UserRole, string[]> = {
     'manage:organization',
     'manage:system_settings',
     'manage:roles',
-    'view:audit_logs',
+    'view:audit_logs',      // legacy alias
     'export:data',
     'import:data',
   ],
@@ -110,6 +111,7 @@ const ROLE_PERMISSIONS: Record<UserRole, string[]> = {
     Permission.IMPORT_EMPLOYEE,
     Permission.EXPORT_EMPLOYEE,
     Permission.READ_ATTENDANCE,
+    Permission.UPDATE_ATTENDANCE, // [SV-M2] was duplicated as raw string 'update:attendance'
     Permission.APPROVE_ATTENDANCE,
     Permission.READ_LEAVE,
     Permission.APPROVE_LEAVE,
@@ -122,16 +124,16 @@ const ROLE_PERMISSIONS: Record<UserRole, string[]> = {
     Permission.READ_ORG,
     Permission.MANAGE_DEPARTMENT,
     Permission.MANAGE_POSITION,
-    Permission.VIEW_AUDIT_LOG,
+    Permission.VIEW_AUDIT_LOG,   // [SV-M2] was duplicated as raw string 'view:audit_logs'
+    // Raw strings with no enum equivalent
     'read:all_employees',
-    'update:attendance',
     'approve:requests',
     'reject:requests',
     'read:all_requests',
     'read:all_documents',
     'upload:document',
     'read:payroll',
-    'view:audit_logs',
+    'view:audit_logs',           // legacy alias kept for backward compat
     'export:data',
     'import:data',
   ],
@@ -248,13 +250,17 @@ class RBACService {
         .single();
 
       if (error || !data) {
-        console.error('❌ Error fetching user role:', error?.message);
+        logger.error('Error fetching user role', error);
         return null;
       }
 
-      return normalizeRole(data.role) || 'karyawan';
+      const normalized = normalizeRole(data.role);
+      if (!normalized) {
+        logger.warn(`RBAC fallback to 'karyawan' for user ${userId} (original role: ${data.role})`);
+      }
+      return normalized || 'karyawan';
     } catch (error: any) {
-      console.error('❌ Error in getUserRole:', error?.message || String(error));
+      logger.error('Error in getUserRole', error);
       return null;
     }
   }
@@ -281,7 +287,7 @@ class RBACService {
         unitId: data.unitKerjaId ?? null,
       };
     } catch (error: any) {
-      console.error('Error fetching user context:', error?.message || String(error));
+      logger.error('Error fetching user context', error);
       return null;
     }
   }
@@ -400,7 +406,12 @@ class RBACService {
     return { allowed: false, reason: 'Role Anda tidak memiliki hak approve' };
   }
 
-  canManagePayroll(userRole: UserRole | string | null): PermissionCheck {
+  canManagePayroll(
+    userRole: UserRole | string | null,
+    // [SV-K4] Added unitId params to enable scope check for kepala_ruangan
+    userUnitId?: string,
+    targetUnitId?: string
+  ): PermissionCheck {
     const normalizedRole = normalizeRole(userRole);
 
     if (!normalizedRole) {
@@ -409,6 +420,18 @@ class RBACService {
 
     if (normalizedRole === 'admin' || normalizedRole === 'hrd') {
       return { allowed: true };
+    }
+
+    // [SV-K4] kepala_ruangan can VIEW (not create/update) payroll for their own unit only
+    if (normalizedRole === 'kepala_ruangan') {
+      if (userUnitId && targetUnitId && userUnitId === targetUnitId) {
+        return { allowed: true };
+      }
+      if (!targetUnitId) {
+        // Caller didn't pass targetUnitId — block by default (conservative)
+        return { allowed: false, reason: 'Kepala ruangan hanya dapat melihat gaji karyawan di unit mereka' };
+      }
+      return { allowed: false, reason: 'Payroll di luar unit Anda tidak dapat diakses' };
     }
 
     return { allowed: false, reason: 'Hanya admin & HRD yang dapat mengelola gaji' };

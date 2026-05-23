@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef } from 'react';
+import logger from '../services/logger.ts';
 
 import { authService } from '../services/AuthService';
 
@@ -44,7 +45,7 @@ const timed = async <T>(label: string, task: () => Promise<T>): Promise<T> => {
 
       const elapsed = performance.now() - startedAt;
 
-      console.log(`[PERF] ${label}: ${elapsed.toFixed(1)}ms`);
+      logger.debug(`[PERF] ${label}: ${elapsed.toFixed(1)}ms`);
 
     }
 
@@ -360,7 +361,7 @@ export const useAppInitialization = () => {
 
       if (PERF_ENABLED) {
 
-        console.warn('[PERF] session-check watchdog: forcing recovery from stale lock');
+        logger.warn('[PERF] session-check watchdog: forcing recovery from stale lock');
 
       }
 
@@ -501,10 +502,7 @@ export const useAppInitialization = () => {
 
 
       await enforceEmployeeAccess(session.user.email, profile);
-
       setAuthUser({ id: session.user.id, email: session.user.email, profile });
-
-      setView('dashboard');
 
 
 
@@ -620,7 +618,7 @@ export const useAppInitialization = () => {
 
             if (perfBootstrapLogCount.current < 3) {
 
-              console.log(`[PERF] bootstrap:totalUntilBackgroundDone: ${total.toFixed(1)}ms`);
+              logger.debug(`[PERF] bootstrap:totalUntilBackgroundDone: ${total.toFixed(1)}ms`);
 
             }
 
@@ -665,13 +663,8 @@ export const useAppInitialization = () => {
     }
 
   }, [
-
-    authUser,
-
     isResetPasswordPage,
-
     setAuthLoading,
-
     setAuthError,
 
     setIsDatabaseError,
@@ -699,6 +692,8 @@ export const useAppInitialization = () => {
 
 
   useEffect(() => {
+
+    const recoveryCheckTimerRef = { current: null as ReturnType<typeof setTimeout> | null };
 
     const checkForPasswordRecovery = () => {
 
@@ -746,7 +741,8 @@ export const useAppInitialization = () => {
 
     if (!isRecovery) {
 
-      setTimeout(checkForPasswordRecovery, 1000);
+      // [HK-K4] Track timeout ID so it can be cleared on unmount
+      recoveryCheckTimerRef.current = setTimeout(checkForPasswordRecovery, 1000);
 
     }
 
@@ -765,6 +761,12 @@ export const useAppInitialization = () => {
     return () => {
 
       window.removeEventListener('hashchange', handleHashChange);
+
+      // [HK-K4] Clear timeout on cleanup to prevent state update after unmount
+      if (recoveryCheckTimerRef.current) {
+        clearTimeout(recoveryCheckTimerRef.current);
+        recoveryCheckTimerRef.current = null;
+      }
 
     };
 
@@ -793,6 +795,11 @@ export const useAppInitialization = () => {
       if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'INITIAL_SESSION') {
 
         setIsResetPasswordPage(false);
+
+        // [HK-K3] Guard: only call handleSession if component is still mounted.
+        // In React StrictMode, this listener fires before the mounted.current = true
+        // assignment in the last useEffect, causing handleSession to run on unmounted state.
+        if (!mounted.current) return;
 
         await handleSession({ silent: Boolean(authUser) || event !== 'SIGNED_IN' });
 
@@ -948,6 +955,10 @@ export const useAppInitialization = () => {
 
 const enforceEmployeeAccess = async (sessionEmail: string | undefined, profile: Employee) => {
 
+  if (!profile) {
+    throw new Error('Akun Anda tidak terdaftar sebagai karyawan. Hubungi admin HRD.');
+  }
+
   const normalizeEmail = (email?: string | null) => email?.trim().toLowerCase() || '';
 
   const authEmail = normalizeEmail(sessionEmail);
@@ -955,12 +966,6 @@ const enforceEmployeeAccess = async (sessionEmail: string | undefined, profile: 
   const employeeEmail = normalizeEmail(profile.email);
 
 
-
-  if (!profile) {
-
-    throw new Error('Akun Anda tidak terdaftar sebagai karyawan. Hubungi admin HRD.');
-
-  }
 
 
 

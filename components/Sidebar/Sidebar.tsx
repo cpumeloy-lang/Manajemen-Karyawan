@@ -1,91 +1,173 @@
 /**
+
  * components/Sidebar/Sidebar.tsx
+
  * Main sidebar component with navigation
+
  * Extracted from App.tsx
+
  */
 
+
+
 import React, { useState, useEffect, useCallback } from 'react';
+
 import type { View } from '../../types';
+
 import { NavButton } from './NavButton';
+
 import {
+
   UserGroupIcon,
+
   Squares2x2Icon,
+
   Cog6ToothIcon,
+
   ClockIcon,
+
   CurrencyDollarIcon,
+
   BellAlertIcon,
+
   ArrowLeftOnRectangleIcon,
+
   UserCircleIcon,
+
   ClipboardDocumentListIcon,
+
 } from '../icons';
+
 import { isAdminRole, isHrRole, isKepalaRuanganRole } from '../../utils/roleUtils';
 
+
+
 interface SidebarProps {
+
   activePortal: 'personal' | 'operational' | null;
+
   effectiveView: View;
+
   systemSettings: { institution_name?: string; logo_url?: string } | null;
+
   authUser: { profile?: { role?: string; nama?: string }; email?: string };
+
   canAccessOperationalPortal: boolean;
+
   pendingRequestsCount: number;
+
   isLoggingOut: boolean;
+
   isChangePasswordOpen: boolean;
+
   
+
   // Callbacks
+
   onNavigate: (view: View) => void;
+
   onPortalToggle: () => void;
+
   onChangePasswordClick: () => void;
+
   onLogout: () => void;
+
   onAuditLogClick: () => void;
+
 }
 
+
+
 export const Sidebar: React.FC<SidebarProps> = ({
+
   activePortal,
+
   effectiveView,
+
   systemSettings,
+
   authUser,
+
   canAccessOperationalPortal,
+
   pendingRequestsCount,
+
   isLoggingOut,
+
   onNavigate,
+
   onPortalToggle,
+
   onChangePasswordClick,
+
   onLogout,
+
   onAuditLogClick,
+
 }) => {
+
   const userRole = authUser?.profile?.role;
+
   const [mobileOpen, setMobileOpen] = useState(false);
 
+
+
   // Close sidebar on route change (mobile)
+
   const handleNavigate = useCallback((view: View) => {
+
     onNavigate(view);
+
     setMobileOpen(false);
+
   }, [onNavigate]);
 
+
+
   // Close on Escape key
+
   useEffect(() => {
+
     const handler = (e: KeyboardEvent) => {
+
       if (e.key === 'Escape') setMobileOpen(false);
+
     };
+
     document.addEventListener('keydown', handler);
+
     return () => document.removeEventListener('keydown', handler);
+
   }, []);
 
+
+
   // Prevent body scroll when mobile sidebar is open
+
   useEffect(() => {
+
     if (mobileOpen) {
+
       document.body.style.overflow = 'hidden';
+
     } else {
+
       document.body.style.overflow = '';
+
     }
+
     return () => { document.body.style.overflow = ''; };
+
   }, [mobileOpen]);
+
+
 
   return (
     <>
     {/* Mobile hamburger button */}
     <button
       onClick={() => setMobileOpen(true)}
-      className="fixed top-4 left-4 z-50 lg:hidden flex items-center justify-center w-10 h-10 rounded-xl bg-white shadow-lg border border-gray-200 text-gray-700 hover:bg-gray-50"
+      className="fixed top-4 left-4 z-50 lg:hidden flex items-center justify-center w-10 h-10 rounded-xl bg-white dark:bg-slate-800 shadow-lg border border-gray-200 dark:border-slate-700 text-gray-700 dark:text-slate-200 hover:bg-gray-50 dark:hover:bg-slate-700"
       aria-label="Buka menu navigasi"
     >
       <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -102,7 +184,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     )}
 
     <aside className={`
-      w-64 bg-gray-900 shadow-xl shadow-gray-900/20 flex flex-col p-4 fixed h-full z-50
+      w-64 bg-white dark:bg-[#0f1724] dark:border-r dark:border-slate-800 shadow-md flex flex-col p-4 fixed h-full z-50
       transition-transform duration-300 ease-in-out
       lg:translate-x-0
       ${mobileOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
@@ -116,13 +198,18 @@ export const Sidebar: React.FC<SidebarProps> = ({
             {(systemSettings?.institution_name || 'H')[0].toUpperCase()}
           </div>
         )}
-        <h1 className="text-lg font-bold text-white truncate">
-          {systemSettings?.institution_name || 'HRMS Pro'}
-        </h1>
+        <div className="ml-3 overflow-hidden">
+          <h1 className="font-bold text-lg text-gray-900 dark:text-slate-100 truncate">
+            {systemSettings?.institution_name || 'HRMS Pro'}
+          </h1>
+          <p className="text-xs text-primary dark:text-teal-400 font-medium tracking-wide uppercase">
+            Sistem Manajemen
+          </p>
+        </div>
         {/* Close button (mobile) */}
         <button
           onClick={() => setMobileOpen(false)}
-          className="ml-auto lg:hidden text-gray-500 hover:text-gray-300"
+          className="ml-auto lg:hidden text-gray-400 hover:text-gray-700"
           aria-label="Tutup menu"
         >
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -136,9 +223,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
         {/* Admin Navigation */}
         {activePortal === 'operational' && isAdminRole(userRole) && (
           <>
-            <p className="px-4 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+            <div className="text-xs font-semibold text-gray-400 dark:text-slate-500 uppercase tracking-wider mb-3 px-2 mt-4">
               Admin
-            </p>
+            </div>
             <NavButton
               viewName="dashboard"
               label="Dashboard"
@@ -212,7 +299,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         {activePortal === 'operational' &&
           (isHrRole(userRole) || isKepalaRuanganRole(userRole)) && (
             <>
-              <p className="px-4 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+              <p className="px-4 py-2 text-xs font-semibold text-gray-400 uppercase">
                 {isHrRole(userRole) ? 'HRD' : 'Kepala Ruangan'}
               </p>
               <NavButton
@@ -306,7 +393,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         {/* Employee Navigation */}
         {activePortal === 'personal' && (
           <>
-            <p className="px-4 pt-6 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+            <p className="px-4 pt-6 py-2 text-xs font-semibold text-gray-400 uppercase">
               Karyawan
             </p>
             <NavButton
@@ -333,7 +420,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         {canAccessOperationalPortal && (
           <button
             onClick={onPortalToggle}
-            className="w-full flex items-center gap-3 px-4 py-2 rounded-lg text-sm font-medium text-gray-400 hover:bg-gray-800 hover:text-white mb-2 transition-all"
+            className="w-full flex items-center gap-3 px-4 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-[#e6f3f2] hover:text-[#06736a] mb-2 transition-colors"
             disabled={isLoggingOut}
           >
             <UserCircleIcon className="h-5 w-5" />
@@ -346,15 +433,23 @@ export const Sidebar: React.FC<SidebarProps> = ({
         )}
 
         {/* User Info */}
-        <div className="text-center text-xs text-gray-500 mb-2 p-2 border-t border-gray-800">
-          <p className="font-semibold">{authUser?.profile?.nama}</p>
-          <p>{authUser?.email}</p>
+        <div className="border-t border-gray-200 dark:border-slate-800 pt-4 mt-6">
+          <div className="flex items-center px-4 mb-4">
+            <div className="ml-3 flex-1 overflow-hidden">
+              <p className="text-sm font-medium text-gray-900 dark:text-slate-200 truncate">
+                {authUser?.profile?.nama || authUser?.email || 'User'}
+              </p>
+              <p className="text-xs text-gray-500 dark:text-slate-400 truncate">
+                {authUser?.profile?.role || 'Karyawan'}
+              </p>
+            </div>
+          </div>
         </div>
 
         {/* Change Password Button */}
         <button
           onClick={onChangePasswordClick}
-          className="w-full flex items-center gap-3 px-4 py-2 rounded-lg text-sm font-medium text-gray-400 hover:bg-gray-800 hover:text-white mb-2 transition-all"
+          className="w-full flex items-center gap-3 px-4 py-2 rounded-lg text-sm font-medium text-gray-600 dark:text-slate-400 hover:bg-[#e6f3f2] dark:hover:bg-teal-900/30 hover:text-[#06736a] dark:hover:text-teal-400 mb-2 transition-colors"
           disabled={isLoggingOut}
         >
           <svg
@@ -377,7 +472,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         {isAdminRole(userRole) && (
           <button
             onClick={onAuditLogClick}
-            className="w-full flex items-center gap-3 px-4 py-2 rounded-lg text-sm font-medium text-gray-400 hover:bg-gray-800 hover:text-white mb-2 transition-all"
+            className="w-full flex items-center gap-3 px-4 py-2 rounded-lg text-sm font-medium text-gray-600 dark:text-slate-400 hover:bg-[#e6f3f2] dark:hover:bg-teal-900/30 hover:text-[#06736a] dark:hover:text-teal-400 mb-2 transition-colors"
             disabled={isLoggingOut}
           >
             <svg
@@ -401,10 +496,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
         <button
           onClick={onLogout}
           disabled={isLoggingOut}
-          className={`flex w-full items-center justify-center gap-3 rounded-lg px-4 py-3 text-sm font-medium transition-all ${
+          className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-colors ${
             isLoggingOut
-              ? 'bg-gray-800 text-gray-400 cursor-not-allowed'
-              : 'text-gray-400 hover:bg-red-900/30 hover:text-red-400'
+              ? 'bg-gray-100 dark:bg-slate-800 text-gray-400 dark:text-slate-500 cursor-not-allowed'
+              : 'text-gray-600 dark:text-slate-400 hover:bg-red-50 dark:hover:bg-red-900/30 hover:text-red-600 dark:hover:text-red-400'
           }`}
         >
           {isLoggingOut ? (
@@ -427,19 +522,36 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   className="opacity-75"
                   fill="currentColor"
                   d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+
                 />
+
               </svg>
+
               <span>Logging out...</span>
+
             </>
+
           ) : (
+
             <>
+
               <ArrowLeftOnRectangleIcon className="h-5 w-5" />
+
               <span>Logout</span>
+
             </>
+
           )}
+
         </button>
+
       </div>
+
     </aside>
+
     </>
+
   );
+
 };
+

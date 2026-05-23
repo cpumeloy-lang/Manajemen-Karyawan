@@ -12,6 +12,7 @@ import React, {
   useRef,
   useState,
 } from 'react';
+import logger from '../services/logger.ts';
 
 type ConfirmVariant = 'default' | 'danger' | 'warning' | 'success';
 
@@ -173,8 +174,7 @@ export function useConfirm(): ConfirmContextValue['confirm'] {
   const ctx = useContext(ConfirmContext);
   if (!ctx) {
     // Fallback to window.confirm if Provider missing — keeps things robust
-    // eslint-disable-next-line no-console
-    console.warn('useConfirm() called outside ConfirmProvider; falling back to window.confirm.');
+    logger.warn('useConfirm() called outside ConfirmProvider; falling back to window.confirm.');
     return (opts) => {
       const msg = typeof opts === 'string' ? opts : String(opts.message || '');
       return Promise.resolve(window.confirm(msg));

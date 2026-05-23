@@ -1,4 +1,5 @@
 import { useCallback } from 'react';
+import logger from '../services/logger.ts';
 
 import { useAppErrorActions, useUIActions, useUI } from '../stores/appStore';
 
@@ -52,11 +53,11 @@ export const useMessageHandlers = () => {
 
       if (detail) {
 
-        console.error(errorMessage, err);
+        logger.error(errorMessage, err);
 
       } else {
 
-        console.error(errorMessage);
+        logger.error(errorMessage);
 
       }
 

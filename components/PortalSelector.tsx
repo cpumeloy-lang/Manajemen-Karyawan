@@ -106,12 +106,12 @@ const PortalSelector: React.FC<PortalSelectorProps> = ({
             disabled={!canAccessOperational}
             className={`group relative overflow-hidden rounded-2xl border-2 p-7 text-left shadow-sm transition-all focus:outline-none focus:ring-4 ${
               canAccessOperational
-                ? 'border-amber-200 bg-white hover:border-amber-400 hover:shadow-xl hover:shadow-amber-200/30 focus:ring-amber-200'
-                : 'border-slate-200 bg-slate-50 cursor-not-allowed opacity-60'
+                ? 'border-amber-200 dark:border-amber-500/30 bg-white dark:bg-[#0f1724] hover:border-amber-400 dark:hover:border-amber-500/60 hover:shadow-xl hover:shadow-amber-200/30 dark:hover:shadow-amber-900/30 focus:ring-amber-200'
+                : 'border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/50 cursor-not-allowed opacity-60'
             }`}
           >
             {canAccessOperational && (
-              <div className="absolute -top-12 -right-12 w-40 h-40 rounded-full bg-gradient-to-br from-amber-200/30 to-amber-100/20 blur-2xl group-hover:from-amber-300/40 transition-all" />
+              <div className="absolute -top-12 -right-12 w-40 h-40 rounded-full bg-gradient-to-br from-amber-200/30 dark:from-amber-500/20 to-amber-100/20 dark:to-amber-900/10 blur-2xl group-hover:from-amber-300/40 dark:group-hover:from-amber-500/30 transition-all" />
             )}
 
             <div className="relative">
@@ -119,8 +119,8 @@ const PortalSelector: React.FC<PortalSelectorProps> = ({
                 <div
                   className={`flex h-14 w-14 items-center justify-center rounded-xl ring-4 ${
                     canAccessOperational
-                      ? 'bg-amber-50 text-amber-600 ring-amber-100/50'
-                      : 'bg-slate-100 text-slate-400 ring-slate-100'
+                      ? 'bg-amber-50 dark:bg-amber-500/10 text-amber-600 dark:text-amber-400 ring-amber-100/50 dark:ring-amber-500/20'
+                      : 'bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 ring-slate-100 dark:ring-slate-800'
                   }`}
                 >
                   <svg
@@ -141,45 +141,45 @@ const PortalSelector: React.FC<PortalSelectorProps> = ({
                 <span
                   className={`text-xs font-semibold uppercase tracking-wider px-3 py-1 rounded-full ${
                     canAccessOperational
-                      ? 'text-amber-700 bg-amber-50'
-                      : 'text-slate-400 bg-slate-100'
+                      ? 'text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-500/10'
+                      : 'text-slate-400 dark:text-slate-500 bg-slate-100 dark:bg-slate-800'
                   }`}
                 >
                   {canAccessOperational ? 'Akses Khusus' : 'Tidak Tersedia'}
                 </span>
               </div>
 
-              <h2 className="text-xl font-bold text-slate-900 mb-2">Portal Operasional</h2>
-              <p className="text-sm text-slate-600 leading-relaxed mb-5">
+              <h2 className="text-xl font-bold text-slate-900 dark:text-slate-100 mb-2">Portal Operasional</h2>
+              <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed mb-5">
                 {canAccessOperational
                   ? 'Kelola karyawan, validasi absensi, atur jadwal shift, proses penggajian, dan akses audit log.'
                   : 'Portal ini hanya dapat diakses oleh role HRD, Admin, atau Kepala Ruangan.'}
               </p>
 
               <ul className="space-y-2 mb-5">
-                <li className="flex items-center gap-2 text-sm text-slate-600">
-                  <span className={canAccessOperational ? 'text-amber-600' : 'text-slate-400'}>✓</span>
+                <li className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-400">
+                  <span className={canAccessOperational ? 'text-amber-600 dark:text-amber-400' : 'text-slate-400 dark:text-slate-500'}>✓</span>
                   Manajemen karyawan & jadwal
                 </li>
-                <li className="flex items-center gap-2 text-sm text-slate-600">
-                  <span className={canAccessOperational ? 'text-amber-600' : 'text-slate-400'}>✓</span>
+                <li className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-400">
+                  <span className={canAccessOperational ? 'text-amber-600 dark:text-amber-400' : 'text-slate-400 dark:text-slate-500'}>✓</span>
                   Approval permohonan & absensi
                 </li>
-                <li className="flex items-center gap-2 text-sm text-slate-600">
-                  <span className={canAccessOperational ? 'text-amber-600' : 'text-slate-400'}>✓</span>
+                <li className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-400">
+                  <span className={canAccessOperational ? 'text-amber-600 dark:text-amber-400' : 'text-slate-400 dark:text-slate-500'}>✓</span>
                   Penggajian & audit log
                 </li>
               </ul>
 
               {canAccessOperational ? (
-                <span className="inline-flex items-center gap-1 text-sm font-semibold text-amber-700 group-hover:gap-2 transition-all">
+                <span className="inline-flex items-center gap-1 text-sm font-semibold text-amber-700 dark:text-amber-400 group-hover:gap-2 transition-all">
                   Masuk Portal Operasional
                   <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" />
                   </svg>
                 </span>
               ) : (
-                <span className="inline-flex items-center gap-1 text-sm font-medium text-slate-400">
+                <span className="inline-flex items-center gap-1 text-sm font-medium text-slate-400 dark:text-slate-500">
                   🔒 Akses ditolak
                 </span>
               )}

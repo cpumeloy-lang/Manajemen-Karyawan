@@ -4,6 +4,7 @@
  */
 
 import { supabase } from './supabaseClient';
+import logger from './logger.ts';
 
 export interface DocumentMetadata {
     id?: string;
@@ -125,7 +126,7 @@ export const uploadDocument = async (
             });
 
         if (storageError) {
-            console.error('Storage error:', storageError);
+            logger.error('Storage error', storageError);
             return { success: false, error: `Gagal upload file: ${storageError.message}` };
         }
 
@@ -157,7 +158,7 @@ export const uploadDocument = async (
             .single();
 
         if (dbError) {
-            console.error('Database error:', dbError);
+            logger.error('Database error', dbError);
             // Rollback: hapus file dari storage
             await supabase.storage.from('documents').remove([filePath]);
             return { success: false, error: `Gagal menyimpan metadata: ${dbError.message}` };
@@ -166,7 +167,7 @@ export const uploadDocument = async (
         return { success: true, data: mapDocumentFromDatabase(dbData) };
 
     } catch (error) {
-        console.error('Upload error:', error);
+        logger.error('Upload error', error);
         return { success: false, error: 'Terjadi kesalahan saat upload dokumen' };
     }
 };
@@ -198,7 +199,7 @@ export const downloadDocument = async (fileUrl: string, fileName: string): Promi
         URL.revokeObjectURL(url);
 
     } catch (error) {
-        console.error('Download error:', error);
+        logger.error('Download error', error);
         throw new Error('Gagal download dokumen');
     }
 };
@@ -218,7 +219,7 @@ export const deleteDocument = async (documentId: string, fileUrl: string): Promi
             .remove([filePath]);
 
         if (storageError) {
-            console.error('Storage delete error:', storageError);
+            logger.error('Storage delete error', storageError);
             return { success: false, error: storageError.message };
         }
 
@@ -229,14 +230,14 @@ export const deleteDocument = async (documentId: string, fileUrl: string): Promi
             .eq('id', documentId);
 
         if (dbError) {
-            console.error('Database delete error:', dbError);
+            logger.error('Database delete error', dbError);
             return { success: false, error: dbError.message };
         }
 
         return { success: true };
 
     } catch (error) {
-        console.error('Delete error:', error);
+        logger.error('Delete error', error);
         return { success: false, error: 'Gagal menghapus dokumen' };
     }
 };
@@ -252,7 +253,7 @@ export const getEmployeeDocuments = async (employeeId: string): Promise<Document
         .order('uploadedAt', { ascending: false });
 
     if (error) {
-        console.error('Get documents error:', error);
+        logger.error('Get documents error', error);
         return [];
     }
 
@@ -278,7 +279,7 @@ export const verifyDocument = async (
         .eq('id', documentId);
 
     if (error) {
-        console.error('Verify error:', error);
+        logger.error('Verify error', error);
         return { success: false, error: error.message };
     }
 
@@ -300,7 +301,7 @@ export const getExpiringDocuments = async (daysBeforeExpiry: number = 30): Promi
         .order('expiresAt', { ascending: true });
 
     if (error) {
-        console.error('Get expiring documents error:', error);
+        logger.error('Get expiring documents error', error);
         return [];
     }
 
