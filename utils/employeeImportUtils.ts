@@ -5,7 +5,7 @@ export interface ImportValidationError {
   nama: string;
   email: string;
   nik: string;
-  kategori?: 'SKIP' | 'ERROR';
+  kategori?: 'SKIP' | 'ERROR' | 'WARNING';
   error: string;
 }
 

@@ -57,4 +57,22 @@ describe('useEmployeeImport helpers', () => {
     expect(shouldSkipExistingEmail(existing, 'ADMIN@HOSPITAL.COM')).toBe(true);
     expect(shouldSkipExistingEmail(existing, 'new@hospital.com')).toBe(false);
   });
+
+  it('reads jabatan field from Excel (header: Jabatan or jabatan)', () => {
+    const row1 = { Nama: 'Budi', Email: 'budi@example.com', Jabatan: 'Dokter Umum' };
+    const row2 = { Nama: 'Andi', Email: 'andi@example.com', jabatan: 'Perawat' };
+
+    expect(getImportField(row1, 'Jabatan', 'jabatan')).toBe('Dokter Umum');
+    expect(getImportField(row2, 'Jabatan', 'jabatan')).toBe('Perawat');
+    expect(getImportField({ Nama: 'C' }, 'Jabatan', 'jabatan')).toBe('');
+  });
+
+  it('reads departemen field from Excel (header: Departemen or departemen)', () => {
+    const row1 = { Nama: 'Budi', Email: 'budi@example.com', Departemen: 'Medis' };
+    const row2 = { Nama: 'Andi', Email: 'andi@example.com', departemen: 'Keperawatan' };
+
+    expect(getImportField(row1, 'Departemen', 'departemen')).toBe('Medis');
+    expect(getImportField(row2, 'Departemen', 'departemen')).toBe('Keperawatan');
+    expect(getImportField({ Nama: 'C' }, 'Departemen', 'departemen')).toBe('');
+  });
 });

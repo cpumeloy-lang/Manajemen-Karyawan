@@ -17,6 +17,10 @@ import {
   ImportValidationError,
 } from '../utils/employeeImportUtils';
 import { getAuthHeaders } from '../utils/apiUtils.ts';
+import {
+  mapEmployeeToDatabase,
+  mapEmployeeFromDatabase,
+} from '../utils/dataMapping';
 
 export const useEmployeeImport = () => {
   const { employees } = useAppData();
@@ -166,6 +170,8 @@ export const useEmployeeImport = () => {
             const bpjsKesehatan = toSafeString(getField(row, 'BPJS_Kesehatan', 'BPJS Kesehatan', 'bpjsKesehatan'));
             const bpjsKetenagakerjaan = toSafeString(getField(row, 'BPJS_Ketenagakerjaan', 'BPJS Ketenagakerjaan', 'bpjsKetenagakerjaan'));
             const agama = toSafeString(getField(row, 'Agama', 'agama')) || undefined;
+            const jabatan = toSafeString(getField(row, 'Jabatan', 'jabatan')) || undefined;
+            const departemen = toSafeString(getField(row, 'Departemen', 'departemen')) || undefined;
             const unitKerjaName = toSafeString(getField(row, 'Unit_Kerja', 'Unit Kerja', 'unitKerjaId', 'unitkerja'));
             const unitKerjaId = unitNameMap.get(unitKerjaName.toLowerCase().trim()) || unitKerjaName || null;
             const maritalStatus = normalizeMaritalStatus(getField(row, 'Status_Nikah', 'Status Nikah', 'maritalStatus'));
@@ -195,6 +201,19 @@ export const useEmployeeImport = () => {
               continue;
             }
 
+            // Check if unit kerja exists (warn but don't block)
+            if (unitKerjaName && !unitKerjaId) {
+              const msg = `Unit Kerja "${unitKerjaName}" tidak ditemukan di database (karyawan akan diimport tanpa unit)`;
+              errorRows.push({
+                baris: i + 2,
+                nama,
+                email,
+                nik,
+                kategori: 'WARNING',
+                error: msg,
+              });
+            }
+
             // Check if email already exists
             if (shouldSkipExistingEmail(existingEmails, email)) {
               const msg = `Email ${email} sudah terdaftar (baris dilewati)`;
@@ -216,6 +235,8 @@ export const useEmployeeImport = () => {
               nama,
               email,
               telepon,
+              jabatan: jabatan || null,
+              departemen: departemen || null,
               birthDate: birthDate || null,
               hireDate: hireDate || null,
               status,
