@@ -444,6 +444,10 @@ app.use((err, req, res, next) => {
 });
 
 // ── Start ──
-app.listen(PORT, () => {
-  console.log(`HRMS Pro server running on port ${PORT} [${IS_PROD ? 'PRODUCTION' : 'DEVELOPMENT'}]`);
-});
+if (!process.env.VERCEL) {
+  app.listen(PORT, () => {
+    console.log(`HRMS Pro server running on port ${PORT} [${IS_PROD ? 'PRODUCTION' : 'DEVELOPMENT'}]`);
+  });
+}
+
+export default app;
