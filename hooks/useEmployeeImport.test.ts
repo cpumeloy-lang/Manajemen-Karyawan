@@ -39,14 +39,14 @@ describe('useEmployeeImport helpers', () => {
     expect(result.errorRows[1].baris).toBe(4);
   });
 
-  it('validates required fields nama and email', () => {
-    const missingEmail = validateRequiredImportFields({ Nama: 'Andi', Email: '' });
+  it('validates only nama is required, email is optional', () => {
     const missingName = validateRequiredImportFields({ Nama: '', Email: 'andi@test.com' });
+    const emptyEmail = validateRequiredImportFields({ Nama: 'Andi', Email: '' });
     const validRow = validateRequiredImportFields({ Nama: 'Andi', Email: 'andi@test.com' });
 
-    expect(missingEmail.valid).toBe(false);
-    expect(missingEmail.error).toContain('wajib diisi');
     expect(missingName.valid).toBe(false);
+    expect(missingName.error).toContain('Nama wajib diisi');
+    expect(emptyEmail.valid).toBe(true); // Email kosong diperbolehkan
     expect(validRow.valid).toBe(true);
   });
 

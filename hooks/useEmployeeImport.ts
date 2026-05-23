@@ -214,8 +214,8 @@ export const useEmployeeImport = () => {
               });
             }
 
-            // Check if email already exists
-            if (shouldSkipExistingEmail(existingEmails, email)) {
+            // Check if email already exists (skip check if email is empty)
+            if (email && shouldSkipExistingEmail(existingEmails, email)) {
               const msg = `Email ${email} sudah terdaftar (baris dilewati)`;
               errorRows.push({
                 baris: i + 2,
@@ -227,6 +227,18 @@ export const useEmployeeImport = () => {
               });
               skippedCount++;
               continue;
+            }
+
+            // Warning if email is empty
+            if (!email) {
+              errorRows.push({
+                baris: i + 2,
+                nama,
+                email: '(kosong)',
+                nik,
+                kategori: 'WARNING',
+                error: 'Email kosong - harap diisi manual melalui edit karyawan',
+              });
             }
 
             // Create employee record

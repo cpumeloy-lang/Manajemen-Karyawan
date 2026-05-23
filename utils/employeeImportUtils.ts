@@ -83,12 +83,13 @@ export const validateRequiredImportFields = (row: any) => {
   const nama = toSafeString(getImportField(row, 'Nama', 'nama'));
   const email = toSafeString(getImportField(row, 'Email', 'email')).toLowerCase();
 
-  if (!nama || !email) {
+  // Hanya Nama yang wajib - Email bisa kosong dan diisi manual nanti
+  if (!nama) {
     return {
       valid: false,
       nama,
       email,
-      error: 'Nama dan Email wajib diisi',
+      error: 'Nama wajib diisi',
     };
   }
 
