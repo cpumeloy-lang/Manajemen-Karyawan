@@ -3,7 +3,7 @@ import { z } from 'zod';
 export const createEmployeeSchema = z.object({
   employeeData: z.object({
     nama: z.string().min(1, 'Nama wajib diisi').max(200),
-    email: z.string().email('Format email tidak valid'),
+    email: z.string().email('Format email tidak valid').optional().or(z.literal('')),
     role: z.string().optional(),
     jabatan: z.string().optional(),
     departemen: z.string().optional(),

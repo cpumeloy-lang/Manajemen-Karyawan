@@ -37,19 +37,21 @@ export const setupEmployeeRoutes = (deps) => {
 
       // [BE-M3] Fail-fast email validation: Check if email is already used in profiles
       // to prevent creating an orphan auth user if profile insert fails.
-      if (employeeData.email) {
+      // Skip check if email is empty (allows import without email to be filled manually later)
+      if (employeeData.email && String(employeeData.email).trim()) {
         const { data: existingEmail } = await context.dbClient
           .from('employees')
           .select('id')
           .eq('email', employeeData.email)
           .maybeSingle();
-        
+
         if (existingEmail) {
           return res.status(400).json({ success: false, error: getClientErrorMessage('auth_create_failed', 'Gagal membuat karyawan: Email sudah terdaftar di sistem.') });
         }
       }
 
-      if (password && String(password).trim()) {
+      // Only create auth user if both password AND email are provided
+      if (password && String(password).trim() && employeeData.email && String(employeeData.email).trim()) {
         const authClient = adminSupabase || context.dbClient;
         const { data: authData, error: authError } = await authClient.auth.admin.createUser({
           email: employeeData.email,

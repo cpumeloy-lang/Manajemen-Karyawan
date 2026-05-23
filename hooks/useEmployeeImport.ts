@@ -305,7 +305,9 @@ export const useEmployeeImport = () => {
             });
 
             setEmployees((prev) => [...prev, employeeWithCompensation]);
-            existingEmails.add(email);
+            if (email) {
+              existingEmails.add(email);
+            }
             successCount++;
           } catch (rowError: any) {
             const row = importedData[i];
