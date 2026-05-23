@@ -206,8 +206,8 @@ export const setupOrganizationRoutes = (deps) => {
       await invalidateOrganizationCaches();
       return res.json({ success: true, data: { id: req.params.id } });
     } catch (err) {
-      logDetailedError('Department.delete.endpoint', err, { departmentId: req.params.id });
-      return res.status(500).json({ success: false, error: getClientErrorMessage('internal_error', 'internal_error') });
+      logDetailedError('Position.save.endpoint', err, { positionId: req.body?.position?.id });
+      return res.status(500).json({ success: false, error: err.message || 'Internal error', stack: err.stack });
     }
   });
 
@@ -303,7 +303,7 @@ export const setupOrganizationRoutes = (deps) => {
       return res.json({ success: true, data: { id: req.params.id } });
     } catch (err) {
       logDetailedError('Position.delete.endpoint', err, { positionId: req.params.id });
-      return res.status(500).json({ success: false, error: getClientErrorMessage('internal_error', 'internal_error') });
+      return res.status(500).json({ success: false, error: err.message || 'Internal error' });
     }
   });
 
