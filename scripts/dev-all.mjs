@@ -50,5 +50,5 @@ function shutdown(signal = 'SIGTERM') {
 process.on('SIGINT', () => shutdown('SIGINT'));
 process.on('SIGTERM', () => shutdown('SIGTERM'));
 
-start('backend', ['server.js']);
+start('backend', ['local-server.js']);
 start('frontend', [path.join(projectRoot, 'node_modules', 'vite', 'bin', 'vite.js'), '--host', '0.0.0.0']);

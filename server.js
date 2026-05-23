@@ -7,7 +7,7 @@ import { createClient } from '@supabase/supabase-js';
 import loggingService from './server/services/loggingService.js';
 import { getRedisStats } from './server/services/redisAdapter.js';
 import dotenv from 'dotenv';
-import { Sentry } from './server/services/sentryService.js';
+// Sentry import removed
 
 import helmet from 'helmet';
 import cors from 'cors';
@@ -18,8 +18,7 @@ import { setupOperationsRoutes } from './server/routes/operationsRoutes.js';
 
 dotenv.config();
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+// Removed __filename and __dirname to fix Vercel import.meta ESM syntax error
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -350,22 +349,7 @@ app.use((req, res, next) => {
   next();
 });
 
-// ── Serve static files with caching ──
-app.use(express.static(path.join(__dirname, 'dist'), {
-  maxAge: IS_PROD ? '1y' : 0,
-  etag: true,
-  lastModified: true,
-  setHeaders: (res, filePath) => {
-    // Immutable cache for hashed assets
-    if (filePath.includes('/assets/')) {
-      res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
-    }
-    // No cache for index.html
-    if (filePath.endsWith('.html')) {
-      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
-    }
-  }
-}));
+// Static file serving removed for Vercel Serverless
 
 // ── System Routes (Health & Metrics & Cache) ──
 app.use('/api', setupSystemRoutes(publicSupabase));
@@ -406,17 +390,9 @@ app.use('/api', setupOperationsRoutes({
   getClientErrorMessage
 }));
 
-// ── SPA fallback ──
-app.get('*', (req, res) => {
-  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
-  res.sendFile(path.join(__dirname, 'dist', 'index.html'));
-});
+// SPA fallback routing removed for Vercel compatibility
 
-// ── Error Handling Middleware (Sentry + custom) ──
-if (process.env.SENTRY_DSN || process.env.VITE_SENTRY_DSN) {
-  app.use(Sentry.Handlers.errorHandler());
-}
-
+// ── Error Handling Middleware ──
 app.use((err, req, res, next) => {
   console.error('Unhandled error:', err);
   
@@ -443,11 +419,7 @@ app.use((err, req, res, next) => {
   });
 });
 
-// ── Start ──
-if (!process.env.VERCEL) {
-  app.listen(PORT, () => {
-    console.log(`HRMS Pro server running on port ${PORT} [${IS_PROD ? 'PRODUCTION' : 'DEVELOPMENT'}]`);
-  });
-}
+// Server start logic moved to local-server.js
 
+// Sentry initialization removed
 export default app;
