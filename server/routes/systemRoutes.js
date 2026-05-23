@@ -1,5 +1,6 @@
 import express from 'express';
 import { getRedisStats } from '../services/redisAdapter.js';
+import { getCache } from '../services/redisCache.js';
 import { validate } from '../middleware/validate.js';
 import { cacheInvalidateSchema } from '../schemas/operationsSchemas.js';
 
@@ -38,7 +39,6 @@ export const setupSystemRoutes = (publicSupabase) => {
     // Check Redis connection
     let redisStatus = 'unknown';
     try {
-      const { getCache } = await import('../services/redisCache.js');
       const cache = getCache();
       const testKey = 'health-check';
       await cache.set(testKey, 'ok', 5);
@@ -85,7 +85,6 @@ export const setupSystemRoutes = (publicSupabase) => {
       }
 
       const { pattern, userId } = req.body || {};
-      const { getCache } = await import('../services/redisCache.js');
       const cache = getCache();
       if (pattern) await cache.invalidatePattern(pattern);
       if (userId) await cache.invalidateUser(userId);

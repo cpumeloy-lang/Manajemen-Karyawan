@@ -6,6 +6,7 @@ import { createGzip } from 'zlib';
 import { createClient } from '@supabase/supabase-js';
 import loggingService from './server/services/loggingService.js';
 import { getRedisStats } from './server/services/redisAdapter.js';
+import { getCache } from './server/services/redisCache.js';
 import dotenv from 'dotenv';
 // Sentry import removed
 
@@ -42,7 +43,6 @@ const adminSupabase = SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY
 
 const invalidateEmployeeCaches = async (employee) => {
   try {
-    const { getCache } = await import('./server/services/redisCache.js');
     const cache = getCache();
     await cache.invalidatePattern('employees:*');
     const identifiers = [employee?.user_id, employee?.id].filter(Boolean);
@@ -56,7 +56,6 @@ const invalidateEmployeeCaches = async (employee) => {
 
 const invalidateOrganizationCaches = async () => {
   try {
-    const { getCache } = await import('./server/services/redisCache.js');
     const cache = getCache();
     await cache.invalidatePattern('employees:*');
     await cache.invalidatePattern('organization:*');
@@ -299,7 +298,6 @@ const RATE_LIMIT_MAX = 120;
 
 const redisRateLimiter = async (req, res, next) => {
   try {
-    const { getCache } = await import('./server/services/redisCache.js');
     const cache = getCache();
     const ip = req.ip || req.socket.remoteAddress;
     const key = `ratelimit:${ip}`;
